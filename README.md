@@ -67,14 +67,14 @@ npm run build
 
 ### GitHub Pages
 
-仓库已包含 GitHub Pages 工作流。推送到默认分支后，可在仓库设置中启用:
+仓库已包含 GitHub Pages 工作流。首次使用前，需要先在仓库设置中手动启用一次 Pages：
 
 1. `Settings`
 2. `Pages`
 3. `Build and deployment`
 4. `Source` 选择 `GitHub Actions`
 
-随后每次推送默认分支，都会自动构建并部署 `dist/`。
+完成一次初始化后，后续每次推送默认分支，都会自动构建并部署 `dist/`。
 
 ### 自定义部署路径
 
