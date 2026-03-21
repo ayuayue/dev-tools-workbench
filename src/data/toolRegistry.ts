@@ -18,14 +18,18 @@ export type ToolGroupId =
   | 'all'
   | 'favorites'
   | 'text'
-  | 'json'
+  | 'format'
   | 'encode'
   | 'crypto'
   | 'timestamp'
   | 'mock'
+  | 'jwt'
+  | 'regex'
+  | 'compress'
+  | 'code'
+  | 'json'
   | 'base64'
   | 'url'
-  | 'jwt'
   | 'data'
   | 'extract'
   | 'generate';
@@ -72,7 +76,25 @@ export type ToolField =
       accept?: string;
       required?: boolean;
       helper?: string;
+    }
+  | {
+      name: string;
+      label: string;
+      type: 'textarea';
+      placeholder?: string;
+      required?: boolean;
+      defaultValue?: string;
+      rows?: number;
     };
+
+export interface ToolWorkspaceConfig {
+  showEditor?: boolean;
+  editorLabel?: string;
+  editorTitle?: string;
+  editorPlaceholder?: string;
+  allowUseResult?: boolean;
+  supportsClipboardImage?: boolean;
+}
 
 export interface ToolRunContext {
   input: string;
@@ -87,8 +109,9 @@ export interface ToolDownload {
 }
 
 export interface ToolPreview {
-  type: 'image';
-  src: string;
+  type: 'image' | 'html';
+  src?: string;
+  srcDoc?: string;
 }
 
 export interface ToolResult {
@@ -113,6 +136,8 @@ export interface ToolDefinition {
   tags: string[];
   fields: ToolField[];
   featured?: boolean;
+  workspace?: ToolWorkspaceConfig;
+  getFieldSuggestions?: (context: ToolRunContext, fieldName: string) => string[];
   run: (context: ToolRunContext) => ToolResult | Promise<ToolResult>;
 }
 
@@ -151,25 +176,25 @@ export const TOOL_GROUPS: ToolGroup[] = [
     id: 'text',
     label: '文本处理',
     kicker: '纯文本',
-    description: '处理大小写、空白、行序、替换和基础文本整理。',
+    description: '处理大小写、空白、行序、提取、替换、正则抽取与基础文本整理。',
   },
   {
-    id: 'json',
-    label: 'JSON 处理',
-    kicker: 'json',
-    description: 'JSON 格式化、压缩以及和其他数据格式的互转。',
+    id: 'format',
+    label: '格式化处理',
+    kicker: 'json/xml/sql',
+    description: '集中处理 JSON、XML、SQL、CSV、Markdown 表格等格式化与结构转换。',
   },
   {
     id: 'encode',
-    label: '编码转换',
-    kicker: 'url/base64',
-    description: '集中处理 URL、Base64 等常见编码与解码能力。',
+    label: '编码处理',
+    kicker: 'url/base64/html',
+    description: '集中处理 URL、Base64、HTML 实体等常见编码与解码能力。',
   },
   {
     id: 'crypto',
     label: '加密处理',
-    kicker: 'hash/aes',
-    description: '提供常见摘要、HMAC 和 AES 加解密工具。',
+    kicker: 'md5/sha/aes',
+    description: '提供 MD5、SHA、HMAC 和 AES 等常见加密与摘要工具。',
   },
   {
     id: 'jwt',
@@ -187,29 +212,36 @@ export const TOOL_GROUPS: ToolGroup[] = [
     id: 'mock',
     label: '模拟数据',
     kicker: 'mock',
-    description: '生成用户名、邮箱、证件、地址、手机号等常用测试数据。',
+    description: '生成中文名、用户名、邮箱、证件、地址、手机号、UUID、GUID 等常用测试数据。',
   },
   {
-    id: 'data',
-    label: '数据格式',
-    kicker: 'xml/csv/md',
-    description: 'XML、CSV、Markdown 表格和 HTML 实体等专一格式处理。',
+    id: 'regex',
+    label: '正则测试',
+    kicker: 'regex',
+    description: '在线测试正则表达式，查看匹配、捕获组和替换结果。',
   },
   {
-    id: 'extract',
-    label: '信息提取',
-    kicker: '抽取信号',
-    description: '从原始文本中提取链接、邮箱、数字和正则结果。',
+    id: 'compress',
+    label: '压缩工具',
+    kicker: 'html/js/css/xml',
+    description: '支持 HTML、JS、CSS、XML 的压缩与解压整理。',
+  },
+  {
+    id: 'code',
+    label: '运行代码',
+    kicker: 'html/js/css',
+    description: '在本地运行 HTML、CSS、JS 代码并直接预览效果。',
   },
 ];
 
 export const FEATURED_TOOL_IDS = [
   'replace-text',
   'json-format',
-  'extract-urls',
+  'json-query',
   'generate-email',
-  'markdown-align',
-  'csv-to-json',
+  'regex-tester',
+  'run-code-preview',
+  'html-minify-tool',
 ];
 
 type ToolFieldLocale = {
@@ -287,6 +319,11 @@ const TAG_I18N: Record<string, Record<AppLanguage, string>> = {
   local: {zh: '本地', en: 'local'},
   beijing: {zh: '北京时间', en: 'beijing'},
   convert: {zh: '换算', en: 'convert'},
+  css: {zh: 'CSS', en: 'css'},
+  js: {zh: 'JS', en: 'js'},
+  sql: {zh: 'SQL', en: 'sql'},
+  guid: {zh: 'GUID', en: 'guid'},
+  extract: {zh: '提取', en: 'extract'},
 };
 
 const TOOL_EN_LOCALES: Record<string, ToolLocale> = {
@@ -343,9 +380,9 @@ const TOOL_EN_LOCALES: Record<string, ToolLocale> = {
   },
   'crypto-hash': {
     name: 'Text Digest',
-    summary: 'Generate SHA-1, SHA-256, SHA-384, or SHA-512 digests.',
+    summary: 'Generate MD5, SHA-1, SHA-256, SHA-384, or SHA-512 digests.',
     fields: {
-      algorithm: {label: 'Algorithm', options: {'SHA-1': 'SHA-1', 'SHA-256': 'SHA-256', 'SHA-384': 'SHA-384', 'SHA-512': 'SHA-512'}},
+      algorithm: {label: 'Algorithm', options: {MD5: 'MD5', 'SHA-1': 'SHA-1', 'SHA-256': 'SHA-256', 'SHA-384': 'SHA-384', 'SHA-512': 'SHA-512'}},
       outputFormat: {label: 'Output', options: {hex: 'Hex', base64: 'Base64'}},
     },
   },
@@ -413,17 +450,66 @@ const TOOL_EN_LOCALES: Record<string, ToolLocale> = {
     summary: 'Generate start-of-day and end-of-day timestamps for a given date.',
     fields: {precision: {label: 'Precision', options: {ms: 'Milliseconds', s: 'Seconds'}}},
   },
-  'generate-username': {name: 'Generate Username', summary: 'Generate a test username.'},
+  'generate-username': {
+    name: 'Generate Username',
+    summary: 'Generate a test username or a Chinese full name.',
+    fields: {style: {label: 'Type', options: {username: 'Username', 'chinese-name': 'Chinese Name'}}},
+  },
   'generate-email': {name: 'Generate Email', summary: 'Generate a test email address.', fields: {domain: {label: 'Domain', placeholder: 'example.com'}}},
-  'generate-phone': {name: 'Generate Phone', summary: 'Generate a mainland China mobile phone number.'},
-  'generate-address': {name: 'Generate Address', summary: 'Generate a Chinese address for testing.'},
-  'generate-id-card': {name: 'Generate ID Card', summary: 'Generate a mainland China ID card format.'},
+  'generate-phone': {
+    name: 'Generate Phone',
+    summary: 'Generate test phone numbers for China, the US, or the UK.',
+    fields: {country: {label: 'Country', options: {CN: 'China', US: 'United States', GB: 'United Kingdom'}}},
+  },
+  'generate-address': {
+    name: 'Generate Address',
+    summary: 'Generate test addresses for China, the US, or the UK.',
+    fields: {country: {label: 'Country', options: {CN: 'China', US: 'United States', GB: 'United Kingdom'}}},
+  },
+  'generate-id-card': {
+    name: 'Generate ID Number',
+    summary: 'Generate CN ID, US SSN, or UK NI style test numbers.',
+    fields: {country: {label: 'Country', options: {CN: 'China ID', US: 'US SSN', GB: 'UK NI'}}},
+  },
   'generate-passport': {name: 'Generate Passport', summary: 'Generate a passport-like identifier for testing.'},
   'generate-license': {name: 'Generate License Number', summary: 'Generate a business license style code for testing.'},
   'generate-uuid': {name: 'Generate UUID', summary: 'Generate a new UUID in the browser.'},
+  'generate-guid': {name: 'Generate GUID', summary: 'Generate an uppercase Windows-style GUID.'},
   'csv-to-json': {name: 'CSV to JSON', summary: 'Treat the first row as headers and convert the rest into a JSON array.'},
   'json-to-csv': {name: 'JSON to CSV', summary: 'Convert a JSON array into CSV rows.'},
   'markdown-align': {name: 'Align Markdown Table', summary: 'Reformat a Markdown table into aligned columns.'},
+  'json-validate': {name: 'Validate JSON', summary: 'Validate JSON and return a short structural summary.'},
+  'json-query': {
+    name: 'JSON Expression',
+    summary: 'Evaluate expressions like $.data.length and show path suggestions.',
+    fields: {query: {label: 'Expression', placeholder: '$.data.length'}},
+  },
+  'sql-format': {name: 'Format SQL', summary: 'Format SQL queries for easier reading.'},
+  'regex-tester': {
+    name: 'Regex Tester',
+    summary: 'Test regex patterns, replacement templates, and captured groups.',
+    fields: {
+      pattern: {label: 'Pattern', placeholder: '(https?://[^\\s]+)'},
+      flags: {label: 'Flags', placeholder: 'gim'},
+      replace: {label: 'Replacement', placeholder: 'Optional, e.g. [$1]'},
+    },
+  },
+  'html-minify-tool': {name: 'Minify HTML', summary: 'Minify HTML and inline CSS/JS.'},
+  'html-format-tool': {name: 'Beautify HTML', summary: 'Beautify minified HTML into a readable layout.'},
+  'js-minify-tool': {name: 'Minify JS', summary: 'Minify JavaScript code.'},
+  'js-format-tool': {name: 'Beautify JS', summary: 'Beautify compressed JavaScript.'},
+  'css-minify-tool': {name: 'Minify CSS', summary: 'Minify CSS stylesheets.'},
+  'css-format-tool': {name: 'Beautify CSS', summary: 'Beautify compressed CSS.'},
+  'xml-format-tool': {name: 'Beautify XML', summary: 'Beautify minified XML.'},
+  'xml-minify-tool': {name: 'Minify XML', summary: 'Minify XML output.'},
+  'run-code-preview': {
+    name: 'Run HTML / JS / CSS',
+    summary: 'Preview HTML with accompanying CSS and JavaScript.',
+    fields: {
+      css: {label: 'CSS', placeholder: 'body { font-family: sans-serif; }'},
+      js: {label: 'JavaScript', placeholder: 'document.getElementById("app").textContent = "Hello";'},
+    },
+  },
 };
 
 const EXACT_MESSAGE_I18N: Record<string, string> = {
@@ -453,10 +539,13 @@ const EXACT_MESSAGE_I18N: Record<string, string> = {
   'HS256 模式需要填写密钥。': 'A secret is required for HS256 mode.',
   '已格式化 JSON。': 'Formatted JSON.',
   '已压缩 JSON。': 'Minified JSON.',
+  '已完成 JSON 校验。': 'Validated JSON.',
+  '已完成 JSON 表达式计算。': 'Evaluated the JSON expression.',
   '已完成 HTML 转义。': 'Encoded HTML entities.',
   '已完成 HTML 反转义。': 'Decoded HTML entities.',
   '已格式化 XML。': 'Formatted XML.',
   '已压缩 XML。': 'Minified XML.',
+  '已格式化 SQL。': 'Formatted SQL.',
   '请输入完整的 JWT 字符串。': 'Please enter a complete JWT string.',
   '已解码 JWT Header 和 Payload。': 'Decoded JWT header and payload.',
   '没有在编辑区中找到 10 到 13 位时间戳。': 'No 10 to 13 digit timestamp was found in the editor.',
@@ -480,9 +569,19 @@ const EXACT_MESSAGE_I18N: Record<string, string> = {
   '已生成护照号。': 'Generated passport number.',
   '已生成执照号。': 'Generated license number.',
   '已生成 UUID。': 'Generated UUID.',
+  '已生成 GUID。': 'Generated GUID.',
+  '已生成中文姓名。': 'Generated a Chinese full name.',
   '已完成 CSV 转 JSON。': 'Converted CSV to JSON.',
   '已完成 JSON 转 CSV。': 'Converted JSON to CSV.',
   '已对齐 Markdown 表格。': 'Aligned the Markdown table.',
+  '已完成 HTML 压缩。': 'Minified HTML.',
+  '已完成 HTML 整理。': 'Beautified HTML.',
+  '已完成 JS 压缩。': 'Minified JavaScript.',
+  '已完成 JS 整理。': 'Beautified JavaScript.',
+  '已完成 CSS 压缩。': 'Minified CSS.',
+  '已完成 CSS 整理。': 'Beautified CSS.',
+  '已完成 XML 整理。': 'Beautified XML.',
+  '已生成代码预览。': 'Generated the code preview.',
   '工具不存在。': 'Tool not found.',
   '工具返回了无效结果。': 'The tool returned an invalid result.',
   '工具执行失败。': 'Tool execution failed.',
@@ -490,6 +589,8 @@ const EXACT_MESSAGE_I18N: Record<string, string> = {
   '当前环境不支持 Web Crypto。': 'This environment does not support Web Crypto.',
   'Payload 必须是合法 JSON。': 'Payload must be valid JSON.',
   'Header 必须是合法 JSON。': 'Header must be valid JSON.',
+  '表达式必须以 $ 开头。': 'The expression must start with $.',
+  'JSON 表达式格式不正确。': 'The JSON expression format is invalid.',
 };
 
 const REGEX_MESSAGE_I18N: Array<{pattern: RegExp; format: (...matches: string[]) => string}> = [
@@ -497,7 +598,7 @@ const REGEX_MESSAGE_I18N: Array<{pattern: RegExp; format: (...matches: string[])
   {pattern: /^已准备好下载文件 (.+)。$/, format: (fileName) => `File ${fileName} is ready to download.`},
   {pattern: /^已将 (.+) 编码为 Base64。$/, format: (name) => `Encoded ${name} as Base64.`},
   {pattern: /^已生成 HMAC-(.+) 签名。$/, format: (algo) => `Generated HMAC-${algo} signature.`},
-  {pattern: /^已生成 (SHA-[\d]+) 摘要。$/, format: (algo) => `Generated ${algo} digest.`},
+  {pattern: /^已生成 ((?:SHA-[\d]+)|MD5) 摘要。$/, format: (algo) => `Generated ${algo} digest.`},
   {pattern: /^已生成图片文件 (.+)$/, format: (name) => `Generated image file ${name}`},
   {pattern: /^已生成文件 (.+)$/, format: (name) => `Generated file ${name}`},
   {pattern: /^已解码图片，支持预览与下载。$/, format: () => 'Decoded image. Preview and download are available.'},
@@ -592,6 +693,22 @@ export function localizeToolResult(result: ToolResult, lang: AppLanguage): ToolR
     message: translateMessage(result.message, lang),
     output: translateMessage(result.output, lang),
   };
+}
+
+export function getToolFieldSuggestions(
+  tool: ToolDefinition | null,
+  context: ToolRunContext,
+  fieldName: string,
+) {
+  if (!tool?.getFieldSuggestions) {
+    return [];
+  }
+
+  try {
+    return tool.getFieldSuggestions(context, fieldName);
+  } catch {
+    return [];
+  }
 }
 
 function buildSearchText(tool: ToolDefinition) {
@@ -851,6 +968,42 @@ function generateMockAddress() {
   const districts = ['朝阳区', '浦东新区', '天河区', '南山区', '西湖区', '武侯区'];
   const roads = ['海棠路', '科技大道', '创新路', '云栖路', '中山路', '和平路'];
   return `${randomItem(cities)}${randomItem(districts)}${randomItem(roads)}${randomInt(8, 399)}号`;
+}
+
+function generateChineseName() {
+  const surnames = ['王', '李', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
+  const given = ['梓涵', '若溪', '宇辰', '思源', '子墨', '嘉宁', '一诺', '天佑', '雨桐', '知远'];
+  return `${randomItem(surnames)}${randomItem(given)}`;
+}
+
+function generatePhoneByCountry(country: string) {
+  if (country === 'US') {
+    return `+1 ${randomInt(201, 989)}-${randomInt(200, 999)}-${randomInt(1000, 9999)}`;
+  }
+  if (country === 'GB') {
+    return `+44 7${randomDigits(9)}`;
+  }
+  return `+86 1${randomItem(['3', '5', '7', '8', '9'])}${randomDigits(9)}`;
+}
+
+function generateAddressByCountry(country: string) {
+  if (country === 'US') {
+    return `${randomInt(100, 9999)} ${randomItem(['Maple', 'Lake', 'Oak', 'Cedar'])} ${randomItem(['Street', 'Avenue', 'Road'])}, ${randomItem(['Seattle', 'Austin', 'Boston'])}, ${randomItem(['WA', 'TX', 'MA'])}`;
+  }
+  if (country === 'GB') {
+    return `${randomInt(10, 299)} ${randomItem(['King', 'Bridge', 'High'])} ${randomItem(['Street', 'Road', 'Lane'])}, ${randomItem(['London', 'Manchester', 'Bristol'])}`;
+  }
+  return generateMockAddress();
+}
+
+function generateIdentityByCountry(country: string) {
+  if (country === 'US') {
+    return `${randomDigits(3)}-${randomDigits(2)}-${randomDigits(4)}`;
+  }
+  if (country === 'GB') {
+    return `${randomItem(['AB', 'CD', 'EF', 'GH'])}${randomDigits(6)}${randomItem(['A', 'B', 'C', 'D'])}`;
+  }
+  return generateChineseIdCard();
 }
 
 function parseJsonRecord(text: string, fallback: Record<string, unknown>, errorMessage: string) {
@@ -1123,6 +1276,263 @@ function alignMarkdownTable(text: string) {
 function extractByRegex(text: string, pattern: string, flags: string) {
   const expression = new RegExp(pattern, flags.includes('g') ? flags : `${flags}g`);
   return [...ensureText(text).matchAll(expression)].map((match) => match[1] ?? match[0]).join('\n');
+}
+
+function buildJsonSummary(value: unknown) {
+  if (Array.isArray(value)) {
+    return {type: 'array', length: value.length};
+  }
+
+  if (value && typeof value === 'object') {
+    return {type: 'object', keys: Object.keys(value as Record<string, unknown>).length};
+  }
+
+  return {type: typeof value, value: ensureText(value)};
+}
+
+function formatResultValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    return String(value);
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function buildJsonPathSuggestions(value: unknown, prefix = '$', output = new Set<string>(), depth = 0) {
+  if (depth > 4 || value === null || value === undefined) {
+    return output;
+  }
+
+  output.add(prefix);
+
+  if (Array.isArray(value)) {
+    output.add(`${prefix}.length`);
+    value.slice(0, 6).forEach((item, index) => {
+      const next = `${prefix}[${index}]`;
+      output.add(next);
+      buildJsonPathSuggestions(item, next, output, depth + 1);
+    });
+    return output;
+  }
+
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).slice(0, 20).forEach(([key, item]) => {
+      const next = /^[A-Za-z_$][\w$]*$/.test(key) ? `${prefix}.${key}` : `${prefix}["${key}"]`;
+      output.add(next);
+      if (Array.isArray(item)) {
+        output.add(`${next}.length`);
+      }
+      buildJsonPathSuggestions(item, next, output, depth + 1);
+    });
+  }
+
+  return output;
+}
+
+function evaluateJsonExpression(source: unknown, expression: string): unknown {
+  const text = ensureText(expression).trim();
+  if (!text || text === '$') {
+    return source;
+  }
+  if (!text.startsWith('$')) {
+    throw new Error('表达式必须以 $ 开头。');
+  }
+
+  let current: unknown = source;
+  let index = 1;
+
+  while (index < text.length) {
+    if (text[index] === '.') {
+      index += 1;
+      let property = '';
+      while (index < text.length && /[\w$]/.test(text[index])) {
+        property += text[index];
+        index += 1;
+      }
+      if (!property) {
+        throw new Error('JSON 表达式格式不正确。');
+      }
+      if (property === 'length' && (Array.isArray(current) || typeof current === 'string')) {
+        current = current.length;
+        continue;
+      }
+      current = (current as Record<string, unknown> | undefined)?.[property];
+      continue;
+    }
+
+    if (text[index] === '[') {
+      const endIndex = text.indexOf(']', index);
+      if (endIndex === -1) {
+        throw new Error('JSON 表达式格式不正确。');
+      }
+
+      const token = text.slice(index + 1, endIndex).trim();
+      if (/^\d+$/.test(token)) {
+        current = (current as unknown[] | undefined)?.[Number(token)];
+      } else {
+        const key = token.replace(/^['"]|['"]$/g, '');
+        current = (current as Record<string, unknown> | undefined)?.[key];
+      }
+      index = endIndex + 1;
+      continue;
+    }
+
+    throw new Error('JSON 表达式格式不正确。');
+  }
+
+  return current;
+}
+
+function md5(text: string) {
+  const input = new TextEncoder().encode(ensureText(text));
+  const originalBitLength = input.length * 8;
+  const withPaddingLength = (((input.length + 8) >> 6) + 1) * 64;
+  const bytes = new Uint8Array(withPaddingLength);
+  bytes.set(input);
+  bytes[input.length] = 0x80;
+
+  const bitLength = BigInt(originalBitLength);
+  for (let offset = 0; offset < 8; offset += 1) {
+    bytes[withPaddingLength - 8 + offset] = Number((bitLength >> BigInt(offset * 8)) & 0xffn);
+  }
+
+  const toWordArray = (buffer: Uint8Array, start: number) =>
+    Array.from({length: 16}, (_, index) => {
+      const base = start + index * 4;
+      return buffer[base] | (buffer[base + 1] << 8) | (buffer[base + 2] << 16) | (buffer[base + 3] << 24);
+    });
+
+  const rotateLeft = (value: number, shift: number) => (value << shift) | (value >>> (32 - shift));
+  const add = (...values: number[]) => values.reduce((sum, value) => (sum + value) | 0, 0);
+  const f = (x: number, y: number, z: number) => (x & y) | (~x & z);
+  const g = (x: number, y: number, z: number) => (x & z) | (y & ~z);
+  const h = (x: number, y: number, z: number) => x ^ y ^ z;
+  const i = (x: number, y: number, z: number) => y ^ (x | ~z);
+
+  const shifts = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5,
+    9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10,
+    15, 21, 6, 10, 15, 21,
+  ];
+  const constants = Array.from({length: 64}, (_, idx) => Math.floor(Math.abs(Math.sin(idx + 1)) * 2 ** 32) | 0);
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const block = toWordArray(bytes, offset);
+    let a = a0;
+    let b = b0;
+    let c = c0;
+    let d = d0;
+
+    for (let step = 0; step < 64; step += 1) {
+      let mixed = 0;
+      let index = 0;
+
+      if (step < 16) {
+        mixed = f(b, c, d);
+        index = step;
+      } else if (step < 32) {
+        mixed = g(b, c, d);
+        index = (5 * step + 1) % 16;
+      } else if (step < 48) {
+        mixed = h(b, c, d);
+        index = (3 * step + 5) % 16;
+      } else {
+        mixed = i(b, c, d);
+        index = (7 * step) % 16;
+      }
+
+      const next = d;
+      d = c;
+      c = b;
+      b = add(b, rotateLeft(add(a, mixed, constants[step], block[index]), shifts[step]));
+      a = next;
+    }
+
+    a0 = add(a0, a);
+    b0 = add(b0, b);
+    c0 = add(c0, c);
+    d0 = add(d0, d);
+  }
+
+  const digest = new Uint8Array(16);
+  [a0, b0, c0, d0].forEach((value, index) => {
+    digest[index * 4] = value & 0xff;
+    digest[index * 4 + 1] = (value >>> 8) & 0xff;
+    digest[index * 4 + 2] = (value >>> 16) & 0xff;
+    digest[index * 4 + 3] = (value >>> 24) & 0xff;
+  });
+  return digest;
+}
+
+async function formatHtmlText(input: string) {
+  const beautify = await import('js-beautify');
+  return beautify.html(ensureText(input), {indent_size: 2, wrap_line_length: 120});
+}
+
+async function formatCssText(input: string) {
+  const beautify = await import('js-beautify');
+  return beautify.css(ensureText(input), {indent_size: 2});
+}
+
+async function formatJsText(input: string) {
+  const beautify = await import('js-beautify');
+  return beautify.js(ensureText(input), {indent_size: 2});
+}
+
+async function minifyHtmlText(input: string) {
+  return ensureText(input)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/>\s+</g, '><')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+async function minifyJsText(input: string) {
+  const terser = await import('terser');
+  const result = await terser.minify(ensureText(input), {
+    compress: true,
+    mangle: false,
+    format: {comments: false},
+  });
+  return result.code ?? '';
+}
+
+async function formatSqlText(input: string) {
+  const formatter = await import('sql-formatter');
+  return formatter.format(ensureText(input), {language: 'sql'});
+}
+
+function minifyCssText(input: string) {
+  return ensureText(input)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}:;,>])\s*/g, '$1')
+    .replace(/;}/g, '}')
+    .trim();
+}
+
+function buildCodePreview(html: string, css: string, js: string) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>${css}</style>
+</head>
+<body>
+${html}
+<script>
+${js}
+<\/script>
+</body>
+</html>`;
 }
 
 export const TOOLS: ToolDefinition[] = [
@@ -1437,13 +1847,18 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'file-to-base64',
     name: '文件/图片转 Base64',
-    summary: '上传任意文件或图片，直接转换成 Base64 字符串。',
+    summary: '支持上传文件、拖拽文件，或直接粘贴图片后转换成 Base64。',
     group: 'encode',
     kind: 'generate',
     level: 'core',
     color: 'secondary',
     icon: Fingerprint,
     tags: ['file', 'image', 'encode'],
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+      supportsClipboardImage: true,
+    },
     fields: [
       {name: 'sourceFile', label: '选择文件', type: 'file', accept: '*/*', required: true, helper: '支持图片和任意文件。'},
       {name: 'withDataUrl', label: '包含 Data URL 头', type: 'checkbox', defaultValue: false},
@@ -1534,8 +1949,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'json-format',
     name: 'JSON 格式化',
-    summary: '格式化并校验 JSON 内容。',
-    group: 'json',
+    summary: '格式化并校验 JSON 内容，适合快速整理接口返回或配置文件。',
+    group: 'format',
     kind: 'transform',
     level: 'core',
     color: 'secondary',
@@ -1555,7 +1970,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'json-minify',
     name: 'JSON 压缩',
     summary: '把 JSON 压缩成单行。',
-    group: 'json',
+    group: 'format',
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
@@ -1571,10 +1986,65 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'json-validate',
+    name: 'JSON 校验',
+    summary: '验证 JSON 是否合法，并返回结构摘要信息。',
+    group: 'format',
+    kind: 'extract',
+    level: 'core',
+    color: 'secondary',
+    icon: Braces,
+    tags: ['json', 'pretty'],
+    fields: [],
+    run({input}) {
+      const parsed = JSON.parse(ensureText(input));
+      return successResult({
+        output: JSON.stringify(
+          {
+            valid: true,
+            summary: buildJsonSummary(parsed),
+          },
+          null,
+          2,
+        ),
+        message: '已完成 JSON 校验。',
+      });
+    },
+  },
+  {
+    id: 'json-query',
+    name: 'JSON 表达式',
+    summary: '使用类似 $.DATA.length 的表达式从 JSON 中读取结果，并提供路径提示。',
+    group: 'format',
+    kind: 'extract',
+    level: 'core',
+    color: 'secondary',
+    icon: Braces,
+    tags: ['json', 'extract'],
+    featured: true,
+    getFieldSuggestions({input, fields}, fieldName) {
+      if (fieldName !== 'query') {
+        return [];
+      }
+      const parsed = JSON.parse(ensureText(input));
+      const current = ensureText(fields.query).trim().toLowerCase();
+      return Array.from(buildJsonPathSuggestions(parsed)).filter((item) => !current || item.toLowerCase().includes(current));
+    },
+    fields: [{name: 'query', label: '表达式', type: 'text', placeholder: '$.data.length', required: true}],
+    run({input, fields}) {
+      const parsed = JSON.parse(ensureText(input));
+      const result = evaluateJsonExpression(parsed, ensureText(fields.query));
+      return successResult({
+        output: formatResultValue(result),
+        message: '已完成 JSON 表达式计算。',
+      });
+    },
+  },
+  {
     id: 'html-encode',
     name: 'HTML Encode',
     summary: '把 HTML 特殊字符转义，避免被直接渲染。',
-    group: 'data',
+    group: 'encode',
     kind: 'transform',
     level: 'core',
     color: 'secondary',
@@ -1593,7 +2063,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'html-decode',
     name: 'HTML Decode',
     summary: '把 HTML 实体恢复成普通文本。',
-    group: 'data',
+    group: 'encode',
     kind: 'transform',
     level: 'core',
     color: 'secondary',
@@ -1612,7 +2082,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'xml-format',
     name: 'XML 格式化',
     summary: '格式化 XML 并保留节点层级。',
-    group: 'data',
+    group: 'format',
     kind: 'transform',
     level: 'core',
     color: 'secondary',
@@ -1628,10 +2098,29 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    id: 'xml-minify',
+    id: 'sql-format',
+    name: 'SQL 格式化',
+    summary: '格式化常见 SQL 语句，适合调试和阅读复杂查询。',
+    group: 'format',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: TableProperties,
+    tags: ['table', 'pretty'],
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await formatSqlText(input),
+        mode: 'replace',
+        message: '已格式化 SQL。',
+      });
+    },
+  },
+  {
+    id: 'xml-minify-tool',
     name: 'XML 压缩',
-    summary: '去掉 XML 的多余空白。',
-    group: 'data',
+    summary: '去掉 XML 的多余空白，输出压缩结果。',
+    group: 'compress',
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
@@ -1649,13 +2138,13 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'crypto-hash',
     name: '文本摘要',
-    summary: '生成 SHA-1、SHA-256、SHA-384、SHA-512 等常见摘要值。',
+    summary: '生成 MD5、SHA-1、SHA-256、SHA-384、SHA-512 等常见摘要值。',
     group: 'crypto',
     kind: 'generate',
     level: 'core',
     color: 'secondary',
     icon: ShieldCheck,
-    tags: ['hash', 'sha'],
+    tags: ['hash', 'sha', 'encrypt'],
     fields: [
       {
         name: 'algorithm',
@@ -1663,6 +2152,7 @@ export const TOOLS: ToolDefinition[] = [
         type: 'select',
         defaultValue: 'SHA-256',
         options: [
+          {label: 'MD5', value: 'MD5'},
           {label: 'SHA-1', value: 'SHA-1'},
           {label: 'SHA-256', value: 'SHA-256'},
           {label: 'SHA-384', value: 'SHA-384'},
@@ -1681,10 +2171,14 @@ export const TOOLS: ToolDefinition[] = [
       },
     ],
     async run({input, fields}) {
-      const digest = await digestText(fields.algorithm as 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512', input);
+      const algorithm = ensureText(fields.algorithm);
+      const digest =
+        algorithm === 'MD5'
+          ? md5(input)
+          : await digestText(algorithm as 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512', input);
       return successResult({
         output: fields.outputFormat === 'base64' ? bytesToBase64(digest) : bytesToHex(digest),
-        message: `已生成 ${fields.algorithm} 摘要。`,
+        message: `已生成 ${algorithm} 摘要。`,
       });
     },
   },
@@ -1848,7 +2342,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'extract-emails',
     name: '提取邮箱',
     summary: '从文本里提取并去重邮箱地址。',
-    group: 'extract',
+    group: 'text',
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
@@ -1868,7 +2362,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'extract-urls',
     name: '提取 URL',
     summary: '从原始文本、日志或文档里提取全部链接。',
-    group: 'extract',
+    group: 'text',
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
@@ -1889,7 +2383,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'extract-numbers',
     name: '提取数字',
     summary: '把所有数字或小数按行提取出来。',
-    group: 'extract',
+    group: 'text',
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
@@ -1909,7 +2403,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'extract-regex',
     name: '正则提取',
     summary: '使用自定义正则提取完整匹配或第一捕获组。',
-    group: 'extract',
+    group: 'regex',
     kind: 'extract',
     level: 'expert',
     color: 'tertiary',
@@ -1925,6 +2419,215 @@ export const TOOLS: ToolDefinition[] = [
         output,
         message: `已提取 ${countLines(output)} 条正则结果。`,
         meta: {count: countLines(output)},
+      });
+    },
+  },
+  {
+    id: 'regex-tester',
+    name: '正则在线测试',
+    summary: '输入样本文本、模式和替换模板，查看匹配明细与替换结果。',
+    group: 'regex',
+    kind: 'extract',
+    level: 'core',
+    color: 'tertiary',
+    icon: ScanSearch,
+    tags: ['regex', 'capture', 'replace'],
+    featured: true,
+    fields: [
+      {name: 'pattern', label: '正则表达式', type: 'text', placeholder: '(https?://[^\\s]+)', required: true},
+      {name: 'flags', label: 'Flags', type: 'text', placeholder: 'gim', defaultValue: 'g'},
+      {name: 'replace', label: '替换模板', type: 'text', placeholder: '可选，例如 [$1]'},
+    ],
+    run({input, fields}) {
+      const pattern = ensureText(fields.pattern);
+      const flags = ensureText(fields.flags || 'g');
+      const expression = new RegExp(pattern, flags.includes('g') ? flags : `${flags}g`);
+      const matches = [...ensureText(input).matchAll(expression)].map((match, index) => ({
+        index,
+        match: match[0],
+        position: match.index ?? -1,
+        groups: match.slice(1),
+      }));
+      const replaced = ensureText(fields.replace) ? ensureText(input).replace(expression, ensureText(fields.replace)) : '';
+
+      return successResult({
+        output: JSON.stringify(
+          {
+            count: matches.length,
+            matches,
+            replaced,
+          },
+          null,
+          2,
+        ),
+        message: `已提取 ${matches.length} 条正则结果。`,
+      });
+    },
+  },
+  {
+    id: 'html-minify-tool',
+    name: 'HTML 压缩',
+    summary: '压缩 HTML，同时内联压缩其中的 CSS 和 JS。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: FileText,
+    tags: ['html', 'minify'],
+    featured: true,
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await minifyHtmlText(input),
+        mode: 'replace',
+        message: '已完成 HTML 压缩。',
+      });
+    },
+  },
+  {
+    id: 'html-format-tool',
+    name: 'HTML 解压整理',
+    summary: '把压缩或混乱的 HTML 重新整理为可读格式。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: FileText,
+    tags: ['html', 'pretty'],
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await formatHtmlText(input),
+        mode: 'replace',
+        message: '已完成 HTML 整理。',
+      });
+    },
+  },
+  {
+    id: 'js-minify-tool',
+    name: 'JS 压缩',
+    summary: '压缩 JavaScript 代码，适合快速查看精简结果。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: Braces,
+    tags: ['json', 'minify'],
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await minifyJsText(input),
+        mode: 'replace',
+        message: '已完成 JS 压缩。',
+      });
+    },
+  },
+  {
+    id: 'js-format-tool',
+    name: 'JS 解压整理',
+    summary: '把压缩后的 JavaScript 重新整理为可读代码。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: Braces,
+    tags: ['json', 'pretty'],
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await formatJsText(input),
+        mode: 'replace',
+        message: '已完成 JS 整理。',
+      });
+    },
+  },
+  {
+    id: 'css-minify-tool',
+    name: 'CSS 压缩',
+    summary: '压缩 CSS 样式表，去掉多余空白和重复写法。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: FileText,
+    tags: ['text', 'minify'],
+    fields: [],
+    run({input}) {
+      return successResult({
+        output: minifyCssText(input),
+        mode: 'replace',
+        message: '已完成 CSS 压缩。',
+      });
+    },
+  },
+  {
+    id: 'css-format-tool',
+    name: 'CSS 解压整理',
+    summary: '把压缩后的 CSS 重新整理成多行格式。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: FileText,
+    tags: ['text', 'pretty'],
+    fields: [],
+    async run({input}) {
+      return successResult({
+        output: await formatCssText(input),
+        mode: 'replace',
+        message: '已完成 CSS 整理。',
+      });
+    },
+  },
+  {
+    id: 'xml-format-tool',
+    name: 'XML 解压整理',
+    summary: '把压缩 XML 重新整理成多行格式。',
+    group: 'compress',
+    kind: 'transform',
+    level: 'expert',
+    color: 'secondary',
+    icon: Braces,
+    tags: ['xml', 'pretty'],
+    fields: [],
+    run({input}) {
+      return successResult({
+        output: formatXml(input),
+        mode: 'replace',
+        message: '已完成 XML 整理。',
+      });
+    },
+  },
+  {
+    id: 'run-code-preview',
+    name: '运行 HTML / JS / CSS',
+    summary: '以 HTML 为主编辑区，配合 CSS 和 JS 代码直接在结果区预览页面效果。',
+    group: 'code',
+    kind: 'generate',
+    level: 'core',
+    color: 'tertiary',
+    icon: Globe,
+    tags: ['html', 'css', 'json'],
+    featured: true,
+    workspace: {
+      editorLabel: 'HTML',
+      editorTitle: 'HTML',
+      editorPlaceholder: '<div id="app">Hello playground</div>',
+      allowUseResult: false,
+    },
+    fields: [
+      {name: 'css', label: 'CSS', type: 'textarea', placeholder: 'body { font-family: sans-serif; }', rows: 7},
+      {name: 'js', label: 'JavaScript', type: 'textarea', placeholder: 'document.getElementById("app").textContent = "Hello";', rows: 7},
+    ],
+    run({input, fields}) {
+      const srcDoc = buildCodePreview(ensureText(input), ensureText(fields.css), ensureText(fields.js));
+      return successResult({
+        output: srcDoc,
+        message: '已生成代码预览。',
+        preview: {
+          type: 'html',
+          srcDoc,
+        },
       });
     },
   },
@@ -2193,15 +2896,37 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'generate-username',
     name: '生成用户名',
-    summary: '生成适合测试用的用户名。',
+    summary: '生成测试用户名，或直接生成中文姓名。',
     group: 'mock',
     kind: 'generate',
     level: 'core',
     color: 'primary',
     icon: Fingerprint,
     tags: ['username', 'mock'],
-    fields: [],
-    run() {
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
+    fields: [
+      {
+        name: 'style',
+        label: '生成类型',
+        type: 'select',
+        defaultValue: 'username',
+        options: [
+          {label: '用户名', value: 'username'},
+          {label: '中文名', value: 'chinese-name'},
+        ],
+      },
+    ],
+    run({fields}) {
+      if (fields.style === 'chinese-name') {
+        return successResult({
+          output: generateChineseName(),
+          message: '已生成中文姓名。',
+        });
+      }
+
       const prefixes = ['mint', 'river', 'pixel', 'cloud', 'lime', 'nova'];
       const suffixes = ['fox', 'dev', 'lab', 'node', 'byte', 'leaf'];
       return successResult({
@@ -2220,6 +2945,10 @@ export const TOOLS: ToolDefinition[] = [
     color: 'primary',
     icon: Fingerprint,
     tags: ['email', 'mock'],
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
     fields: [{name: 'domain', label: '域名', type: 'text', placeholder: 'example.com', defaultValue: 'example.com'}],
     run({fields}) {
       const prefixes = ['mint', 'ocean', 'tester', 'hello', 'alpha', 'demo'];
@@ -2232,17 +2961,33 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'generate-phone',
     name: '生成手机号',
-    summary: '生成中国大陆 11 位测试手机号。',
+    summary: '按国家生成测试手机号，支持中国、美国、英国。',
     group: 'mock',
     kind: 'generate',
     level: 'core',
     color: 'primary',
     icon: Fingerprint,
     tags: ['phone', 'mock'],
-    fields: [],
-    run() {
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
+    fields: [
+      {
+        name: 'country',
+        label: '国家',
+        type: 'select',
+        defaultValue: 'CN',
+        options: [
+          {label: '中国', value: 'CN'},
+          {label: '美国', value: 'US'},
+          {label: '英国', value: 'GB'},
+        ],
+      },
+    ],
+    run({fields}) {
       return successResult({
-        output: `1${randomItem(['3', '5', '7', '8', '9'])}${randomDigits(9)}`,
+        output: generatePhoneByCountry(ensureText(fields.country) || 'CN'),
         message: '已生成手机号。',
       });
     },
@@ -2250,17 +2995,33 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'generate-address',
     name: '生成地址',
-    summary: '生成适合测试表单和订单流的中文地址。',
+    summary: '按国家生成测试地址，支持中国、美国、英国。',
     group: 'mock',
     kind: 'generate',
     level: 'core',
     color: 'primary',
     icon: Fingerprint,
     tags: ['address', 'mock'],
-    fields: [],
-    run() {
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
+    fields: [
+      {
+        name: 'country',
+        label: '国家',
+        type: 'select',
+        defaultValue: 'CN',
+        options: [
+          {label: '中国', value: 'CN'},
+          {label: '美国', value: 'US'},
+          {label: '英国', value: 'GB'},
+        ],
+      },
+    ],
+    run({fields}) {
       return successResult({
-        output: generateMockAddress(),
+        output: generateAddressByCountry(ensureText(fields.country) || 'CN'),
         message: '已生成地址。',
       });
     },
@@ -2268,17 +3029,33 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'generate-id-card',
     name: '生成身份证号',
-    summary: '生成 18 位中国大陆身份证号格式的测试数据。',
+    summary: '按国家生成证件号，支持中国身份证、美国 SSN、英国 NI 号。',
     group: 'mock',
     kind: 'generate',
     level: 'core',
     color: 'primary',
     icon: Fingerprint,
     tags: ['id', 'card', 'mock'],
-    fields: [],
-    run() {
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
+    fields: [
+      {
+        name: 'country',
+        label: '国家',
+        type: 'select',
+        defaultValue: 'CN',
+        options: [
+          {label: '中国身份证', value: 'CN'},
+          {label: '美国 SSN', value: 'US'},
+          {label: '英国 NI', value: 'GB'},
+        ],
+      },
+    ],
+    run({fields}) {
       return successResult({
-        output: generateChineseIdCard(),
+        output: generateIdentityByCountry(ensureText(fields.country) || 'CN'),
         message: '已生成身份证号。',
       });
     },
@@ -2293,6 +3070,10 @@ export const TOOLS: ToolDefinition[] = [
     color: 'primary',
     icon: Fingerprint,
     tags: ['passport', 'mock'],
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
     fields: [],
     run() {
       return successResult({
@@ -2311,6 +3092,10 @@ export const TOOLS: ToolDefinition[] = [
     color: 'primary',
     icon: Fingerprint,
     tags: ['license', 'mock'],
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
     fields: [],
     run() {
       const chars = '0123456789ABCDEFGHJKLMNPQRTUWXY';
@@ -2331,6 +3116,10 @@ export const TOOLS: ToolDefinition[] = [
     icon: Fingerprint,
     tags: ['uuid', 'id'],
     featured: true,
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
     fields: [],
     run() {
       const output =
@@ -2344,10 +3133,36 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'generate-guid',
+    name: '生成 GUID',
+    summary: '生成 Windows 风格的大写 GUID，带大括号。',
+    group: 'mock',
+    kind: 'generate',
+    level: 'core',
+    color: 'primary',
+    icon: Fingerprint,
+    tags: ['uuid', 'id', 'mock'],
+    workspace: {
+      showEditor: false,
+      allowUseResult: false,
+    },
+    fields: [],
+    run() {
+      const base =
+        typeof globalThis.crypto?.randomUUID === 'function'
+          ? globalThis.crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+      return successResult({
+        output: `{${base.toUpperCase()}}`,
+        message: '已生成 GUID。',
+      });
+    },
+  },
+  {
     id: 'csv-to-json',
     name: 'CSV 转 JSON',
     summary: '把首行当作表头，并将后续行转换成 JSON 数组。',
-    group: 'json',
+    group: 'format',
     kind: 'transform',
     level: 'expert',
     color: 'primary',
@@ -2367,7 +3182,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'json-to-csv',
     name: 'JSON 转 CSV',
     summary: '把 JSON 数组转换成 CSV 行。',
-    group: 'json',
+    group: 'format',
     kind: 'transform',
     level: 'expert',
     color: 'primary',
@@ -2386,7 +3201,7 @@ export const TOOLS: ToolDefinition[] = [
     id: 'markdown-align',
     name: 'Markdown 表格对齐',
     summary: '把 Markdown 表格重新整理成对齐的列。',
-    group: 'data',
+    group: 'format',
     kind: 'transform',
     level: 'expert',
     color: 'primary',

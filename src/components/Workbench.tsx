@@ -1,6 +1,13 @@
 import {Clipboard, Download, Eraser, LoaderCircle, RotateCcw, Sparkles, Upload} from 'lucide-react';
 import {motion} from 'motion/react';
-import {AppLanguage, ToolDefinition, ToolFieldValue, ToolResult, UploadedAsset} from '../data/toolRegistry';
+import {
+  AppLanguage,
+  getToolFieldSuggestions,
+  ToolDefinition,
+  ToolFieldValue,
+  ToolResult,
+  UploadedAsset,
+} from '../data/toolRegistry';
 
 interface WorkbenchProps {
   tool: ToolDefinition | null;
@@ -39,12 +46,51 @@ async function readUploadedFile(file: File, lang: AppLanguage): Promise<Uploaded
   };
 }
 
+function SuggestionList({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: string[];
+  onSelect: (value: string) => void;
+}) {
+  if (!suggestions.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {suggestions.slice(0, 10).map((suggestion) => (
+        <button
+          className="rounded-full border border-outline-variant/12 bg-background/55 px-2.5 py-1 text-[11px] font-medium text-on-surface-variant transition hover:border-primary/30 hover:text-primary"
+          key={suggestion}
+          onClick={() => onSelect(suggestion)}
+          type="button"
+        >
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function renderField(
+  tool: ToolDefinition | null,
   field: ToolDefinition['fields'][number],
   value: ToolFieldValue | undefined,
+  editorText: string,
+  fieldValues: Record<string, ToolFieldValue>,
   lang: AppLanguage,
   onFieldChange: (name: string, value: ToolFieldValue) => void,
 ) {
+  const suggestions = getToolFieldSuggestions(
+    tool,
+    {
+      input: editorText,
+      fields: fieldValues,
+    },
+    field.name,
+  );
+
   if (field.type === 'checkbox') {
     return (
       <label className="flex items-center gap-3 rounded-xl border border-outline-variant/12 bg-background/40 px-4 py-3" key={field.name}>
@@ -79,34 +125,83 @@ function renderField(
 
   if (field.type === 'file') {
     const fileValue = value && typeof value === 'object' && 'name' in value ? (value as UploadedAsset) : null;
+    const canPasteImage = Boolean(tool?.workspace?.supportsClipboardImage);
+
+    const setUploadedFile = async (file: File | null) => {
+      if (!file) {
+        onFieldChange(field.name, null);
+        return;
+      }
+
+      const uploaded = await readUploadedFile(file, lang);
+      onFieldChange(field.name, uploaded);
+    };
 
     return (
       <label className="grid gap-2" key={field.name}>
         <span className="label-sm all-caps font-bold tracking-[0.2em] text-on-surface-variant">{field.label}</span>
-        <div className="rounded-xl border border-outline-variant/12 bg-background/40 px-4 py-3">
+        <div
+          className="rounded-xl border border-dashed border-outline-variant/20 bg-background/40 px-4 py-3"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={async (event) => {
+            event.preventDefault();
+            const file = event.dataTransfer.files?.[0] ?? null;
+            await setUploadedFile(file);
+          }}
+          onPaste={async (event) => {
+            if (!canPasteImage) {
+              return;
+            }
+            const imageItem = Array.from(event.clipboardData.items as DataTransferItemList).find((item: DataTransferItem) =>
+              item.type.startsWith('image/'),
+            );
+            const file = imageItem?.getAsFile() ?? null;
+            if (file) {
+              event.preventDefault();
+              await setUploadedFile(file);
+            }
+          }}
+          tabIndex={canPasteImage ? 0 : -1}
+        >
           <input
             accept={field.accept}
             className="block w-full text-sm text-on-surface file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-xs file:font-bold file:uppercase file:tracking-[0.18em] file:text-primary"
             onChange={async (event) => {
               const file = event.target.files?.[0] ?? null;
-              if (!file) {
-                onFieldChange(field.name, null);
-                return;
-              }
-
-              const uploaded = await readUploadedFile(file, lang);
-              onFieldChange(field.name, uploaded);
+              await setUploadedFile(file);
             }}
             type="file"
           />
-          <div className="mt-2 text-xs leading-relaxed text-on-surface-variant">
-            {fileValue
-              ? lang === 'zh'
-                ? `已选择 ${fileValue.name} · ${Math.max(1, Math.round(fileValue.size / 1024))} KB`
-                : `Selected ${fileValue.name} · ${Math.max(1, Math.round(fileValue.size / 1024))} KB`
-              : field.helper ?? (lang === 'zh' ? '请选择一个文件。' : 'Please choose a file.')}
+
+          <div className="mt-2 space-y-1 text-xs leading-relaxed text-on-surface-variant">
+            <div>
+              {fileValue
+                ? lang === 'zh'
+                  ? `已选择 ${fileValue.name} · ${Math.max(1, Math.round(fileValue.size / 1024))} KB`
+                  : `Selected ${fileValue.name} · ${Math.max(1, Math.round(fileValue.size / 1024))} KB`
+                : field.helper ?? (lang === 'zh' ? '请选择一个文件。' : 'Please choose a file.')}
+            </div>
+            {canPasteImage ? (
+              <div>{lang === 'zh' ? '支持直接粘贴截图或拖拽图片到这里。' : 'You can paste a screenshot or drop an image here directly.'}</div>
+            ) : null}
           </div>
         </div>
+      </label>
+    );
+  }
+
+  if (field.type === 'textarea') {
+    return (
+      <label className="grid gap-2" key={field.name}>
+        <span className="label-sm all-caps font-bold tracking-[0.2em] text-on-surface-variant">{field.label}</span>
+        <textarea
+          className="min-h-[130px] rounded-xl border border-outline-variant/12 bg-background/50 px-4 py-3 font-mono text-sm leading-6 text-on-surface outline-none transition placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+          onChange={(event) => onFieldChange(field.name, event.target.value)}
+          placeholder={field.placeholder}
+          rows={field.rows ?? 6}
+          value={String(value ?? '')}
+        />
+        <SuggestionList suggestions={suggestions} onSelect={(nextValue) => onFieldChange(field.name, nextValue)} />
       </label>
     );
   }
@@ -121,6 +216,7 @@ function renderField(
         type="text"
         value={String(value ?? '')}
       />
+      <SuggestionList suggestions={suggestions} onSelect={(nextValue) => onFieldChange(field.name, nextValue)} />
     </label>
   );
 }
@@ -151,6 +247,12 @@ export default function Workbench({
         ? 'border-error/25 bg-error/8 text-error'
         : 'border-outline-variant/10 bg-background/40 text-on-surface-variant';
 
+  const showEditor = tool?.workspace?.showEditor !== false;
+  const allowUseResult = tool?.workspace?.allowUseResult !== false && showEditor;
+  const editorTitle = tool?.workspace?.editorTitle ?? (lang === 'zh' ? '编辑器' : 'Editor');
+  const editorLabel = tool?.workspace?.editorLabel ?? (lang === 'zh' ? '输入区' : 'Input');
+  const editorPlaceholder = tool?.workspace?.editorPlaceholder ?? (lang === 'zh' ? '把原始文本粘贴到这里...' : 'Paste raw text here...');
+
   return (
     <section className="space-y-4">
       <motion.div
@@ -178,9 +280,13 @@ export default function Workbench({
               </span>
             </div>
             <p className="mt-1 text-xs text-on-surface-variant">
-              {lang === 'zh'
-                ? '先编辑左侧输入，需要参数时在下方调整，然后点这里运行。'
-                : 'Edit the input first, adjust any fields below if needed, then run from here.'}
+              {showEditor
+                ? lang === 'zh'
+                  ? '先准备输入内容，需要参数时在下方调整，然后点这里运行。'
+                  : 'Prepare the input first, adjust any fields below if needed, then run from here.'
+                : lang === 'zh'
+                  ? '这个工具不依赖左侧编辑区，按需调整参数后可直接运行。'
+                  : 'This tool does not rely on the left editor. Adjust the fields if needed and run directly.'}
             </p>
           </div>
 
@@ -209,40 +315,42 @@ export default function Workbench({
         </div>
       </motion.div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="label-sm all-caps tracking-[0.24em] text-secondary">{lang === 'zh' ? '输入区' : 'Input'}</p>
-              <h4 className="mt-2 text-lg font-bold text-on-surface">{lang === 'zh' ? '编辑器' : 'Editor'}</h4>
+      <div className={`grid gap-5 ${showEditor ? 'xl:grid-cols-2' : ''}`}>
+        {showEditor ? (
+          <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="label-sm all-caps tracking-[0.24em] text-secondary">{editorLabel}</p>
+                <h4 className="mt-2 text-lg font-bold text-on-surface">{editorTitle}</h4>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
+                  onClick={onCopyInput}
+                  type="button"
+                >
+                  <Clipboard className="h-4 w-4" />
+                  {lang === 'zh' ? '复制' : 'Copy'}
+                </button>
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
+                  onClick={onClearEditor}
+                  type="button"
+                >
+                  <Eraser className="h-4 w-4" />
+                  {lang === 'zh' ? '清空' : 'Clear'}
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
-                onClick={onCopyInput}
-                type="button"
-              >
-                <Clipboard className="h-4 w-4" />
-                {lang === 'zh' ? '复制' : 'Copy'}
-              </button>
-              <button
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
-                onClick={onClearEditor}
-                type="button"
-              >
-                <Eraser className="h-4 w-4" />
-                {lang === 'zh' ? '清空' : 'Clear'}
-              </button>
-            </div>
-          </div>
 
-          <textarea
-            className="mt-4 min-h-[440px] w-full rounded-2xl border border-outline-variant/12 bg-background/55 p-4 font-mono text-sm leading-6 text-on-surface outline-none transition placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-            onChange={(event) => onEditorChange(event.target.value)}
-            placeholder={lang === 'zh' ? '把原始文本粘贴到这里...' : 'Paste raw text here...'}
-            value={editorText}
-          />
-        </div>
+            <textarea
+              className="mt-4 min-h-[440px] w-full rounded-2xl border border-outline-variant/12 bg-background/55 p-4 font-mono text-sm leading-6 text-on-surface outline-none transition placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+              onChange={(event) => onEditorChange(event.target.value)}
+              placeholder={editorPlaceholder}
+              value={editorText}
+            />
+          </div>
+        ) : null}
 
         <motion.div
           animate={{opacity: 1, y: 0}}
@@ -265,14 +373,16 @@ export default function Workbench({
                 <Clipboard className="h-4 w-4" />
                 {lang === 'zh' ? '复制' : 'Copy'}
               </button>
-              <button
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
-                onClick={onUseResult}
-                type="button"
-              >
-                <Upload className="h-4 w-4" />
-                {lang === 'zh' ? '写回编辑区' : 'Use in Editor'}
-              </button>
+              {allowUseResult ? (
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/12 bg-background/40 px-3 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant transition hover:text-on-surface"
+                  onClick={onUseResult}
+                  type="button"
+                >
+                  <Upload className="h-4 w-4" />
+                  {lang === 'zh' ? '写回编辑区' : 'Use in Editor'}
+                </button>
+              ) : null}
               {result.download ? (
                 <button
                   className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 text-xs font-bold uppercase tracking-[0.16em] text-primary transition hover:bg-primary/15"
@@ -287,14 +397,25 @@ export default function Workbench({
           </div>
 
           <textarea
-            className="mt-4 min-h-[440px] w-full rounded-2xl border border-outline-variant/12 bg-background/55 p-4 font-mono text-sm leading-6 text-on-surface outline-none"
+            className="mt-4 min-h-[240px] w-full rounded-2xl border border-outline-variant/12 bg-background/55 p-4 font-mono text-sm leading-6 text-on-surface outline-none"
             readOnly
             value={result.output}
           />
 
-          {result.preview?.type === 'image' ? (
+          {result.preview?.type === 'image' && result.preview.src ? (
             <div className="mt-4 overflow-hidden rounded-2xl border border-outline-variant/12 bg-background/45 p-3">
               <img alt={lang === 'zh' ? '解码后的预览图' : 'Decoded preview image'} className="max-h-72 w-full rounded-xl object-contain" src={result.preview.src} />
+            </div>
+          ) : null}
+
+          {result.preview?.type === 'html' && result.preview.srcDoc ? (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-outline-variant/12 bg-background/45">
+              <iframe
+                className="min-h-[320px] w-full bg-white"
+                sandbox="allow-scripts allow-modals"
+                srcDoc={result.preview.srcDoc}
+                title={lang === 'zh' ? '代码预览' : 'Code preview'}
+              />
             </div>
           ) : null}
 
@@ -320,7 +441,7 @@ export default function Workbench({
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           {tool?.fields.length ? (
-            tool.fields.map((field) => renderField(field, fieldValues[field.name], lang, onFieldChange))
+            tool.fields.map((field) => renderField(tool, field, fieldValues[field.name], editorText, fieldValues, lang, onFieldChange))
           ) : (
             <div className="rounded-xl border border-outline-variant/12 bg-background/40 px-4 py-3 text-sm text-on-surface-variant">
               {lang === 'zh' ? '这个工具不需要额外参数，直接运行即可。' : 'This tool does not require extra fields. You can run it directly.'}
@@ -329,9 +450,13 @@ export default function Workbench({
         </div>
 
         <div className="mt-4 rounded-xl border border-dashed border-outline-variant/18 bg-background/35 px-4 py-3 text-xs leading-relaxed text-on-surface-variant">
-          {lang === 'zh'
-            ? '运行入口已固定在上方。修改参数后不用滚动到底部，直接点顶部的“运行工具”即可。'
-            : 'The run action is fixed above. After changing fields, you can run immediately without scrolling down.'}
+          {showEditor
+            ? lang === 'zh'
+              ? '运行入口已固定在上方。修改参数后不用滚动到底部，直接点顶部的“运行工具”即可。'
+              : 'The run action is fixed above. After changing fields, you can run immediately without scrolling down.'
+            : lang === 'zh'
+              ? '当前工具以参数或粘贴素材为主，不依赖左侧输入区。'
+              : 'This tool is driven by fields or pasted assets instead of the main editor.'}
         </div>
       </div>
     </section>

@@ -37,20 +37,24 @@ const GROUP_TRANSLATIONS: Record<ToolGroupId, Record<AppLanguage, {label: string
     en: {label: 'Favorites', kicker: 'favorites', description: 'Keep your bookmarked tools in one place.'},
   },
   text: {
-    zh: {label: '文本处理', kicker: '纯文本', description: '处理大小写、空白、行序、替换和基础文本整理。'},
-    en: {label: 'Text', kicker: 'plain text', description: 'Whitespace cleanup, casing, line transforms, and common text tasks.'},
+    zh: {label: '文本处理', kicker: '纯文本', description: '处理大小写、空白、行序、提取、替换、正则抽取与基础文本整理。'},
+    en: {label: 'Text', kicker: 'plain text', description: 'Whitespace cleanup, extraction, casing, regex helpers, and common text tasks.'},
+  },
+  format: {
+    zh: {label: '格式化处理', kicker: 'json/xml/sql', description: '集中处理 JSON、XML、SQL、CSV、Markdown 表格等格式化与结构转换。'},
+    en: {label: 'Format', kicker: 'json/xml/sql', description: 'Format and restructure JSON, XML, SQL, CSV, and markdown tables.'},
   },
   json: {
-    zh: {label: 'JSON 处理', kicker: 'json', description: 'JSON 格式化、压缩以及和其他数据格式的互转。'},
-    en: {label: 'JSON', kicker: 'json', description: 'Format, minify, and convert JSON with other data formats.'},
+    zh: {label: 'JSON 处理', kicker: 'legacy', description: '旧分组，已合并到格式化处理。'},
+    en: {label: 'JSON', kicker: 'legacy', description: 'Legacy group. Moved into Format.'},
   },
   encode: {
-    zh: {label: '编码转换', kicker: 'url/base64', description: '集中处理 URL、Base64 等常见编码与解码能力。'},
-    en: {label: 'Encoding', kicker: 'url/base64', description: 'Work with URL and Base64 encoding and decoding in one module.'},
+    zh: {label: '编码处理', kicker: 'url/base64/html', description: '集中处理 URL、Base64、HTML 实体等常见编码与解码能力。'},
+    en: {label: 'Encoding', kicker: 'url/base64/html', description: 'Handle URL, Base64, and HTML entity encoding and decoding in one place.'},
   },
   crypto: {
-    zh: {label: '加密处理', kicker: 'hash/aes', description: '提供常见摘要、HMAC 和 AES 加解密工具。'},
-    en: {label: 'Crypto', kicker: 'hash/aes', description: 'Use common hash, HMAC, and AES encryption helpers.'},
+    zh: {label: '加密处理', kicker: 'md5/sha/aes', description: '提供 MD5、SHA、HMAC 和 AES 等常见加密与摘要工具。'},
+    en: {label: 'Crypto', kicker: 'md5/sha/aes', description: 'Use MD5, SHA, HMAC, and AES helpers in one module.'},
   },
   jwt: {
     zh: {label: 'JWT', kicker: 'jwt', description: 'JWT 编码、解码与快速检查。'},
@@ -61,16 +65,28 @@ const GROUP_TRANSLATIONS: Record<ToolGroupId, Record<AppLanguage, {label: string
     en: {label: 'Timestamps', kicker: 'time', description: 'Common conversions between timestamps, ISO strings, and local time.'},
   },
   mock: {
-    zh: {label: '模拟数据', kicker: 'mock', description: '生成用户名、邮箱、证件、地址、手机号等常用测试数据。'},
-    en: {label: 'Mock Data', kicker: 'mock', description: 'Generate usernames, emails, IDs, addresses, phones, and more test data.'},
+    zh: {label: '模拟数据', kicker: 'mock', description: '生成中文名、用户名、邮箱、证件、地址、手机号、UUID、GUID 等常用测试数据。'},
+    en: {label: 'Mock Data', kicker: 'mock', description: 'Generate names, usernames, emails, IDs, addresses, phones, UUIDs, and GUIDs.'},
+  },
+  regex: {
+    zh: {label: '正则测试', kicker: 'regex', description: '在线测试正则表达式，查看匹配、捕获组和替换结果。'},
+    en: {label: 'Regex', kicker: 'regex', description: 'Test regex patterns and inspect matches, groups, and replacements.'},
+  },
+  compress: {
+    zh: {label: '压缩工具', kicker: 'html/js/css/xml', description: '支持 HTML、JS、CSS、XML 的压缩与解压整理。'},
+    en: {label: 'Compress', kicker: 'html/js/css/xml', description: 'Compress and beautify HTML, JS, CSS, and XML.'},
+  },
+  code: {
+    zh: {label: '运行代码', kicker: 'html/js/css', description: '在本地运行 HTML、CSS、JS 代码并直接预览效果。'},
+    en: {label: 'Code Runner', kicker: 'html/js/css', description: 'Run HTML, CSS, and JS locally with an inline preview.'},
   },
   data: {
-    zh: {label: '数据格式', kicker: 'xml/csv/md', description: 'XML、CSV、Markdown 表格和 HTML 实体等专一格式处理。'},
-    en: {label: 'Data Formats', kicker: 'xml/csv/md', description: 'Handle XML, CSV, markdown tables, and HTML entities.'},
+    zh: {label: '数据格式', kicker: 'legacy', description: '旧分组，相关工具已合并到格式化处理和编码处理。'},
+    en: {label: 'Data Formats', kicker: 'legacy', description: 'Legacy group. Tools moved into Format and Encoding.'},
   },
   extract: {
-    zh: {label: '信息提取', kicker: '抽取信号', description: '从原始文本中提取链接、邮箱、数字和正则结果。'},
-    en: {label: 'Extract', kicker: 'signals', description: 'Extract URLs, emails, numbers, and regex matches from text.'},
+    zh: {label: '信息提取', kicker: 'legacy', description: '旧分组，相关工具已移动到文本处理和正则测试。'},
+    en: {label: 'Extract', kicker: 'legacy', description: 'Legacy group. Tools moved into Text and Regex.'},
   },
   base64: {
     zh: {label: 'Base64', kicker: 'legacy', description: '旧分组，已合并到编码转换。'},
@@ -96,7 +112,7 @@ const UI_COPY = {
     sidebarBadge: '开发工具台',
     sidebarTitle: '开发工具台',
     sidebarDescription:
-      '集中提供文本处理、JSON、编码转换、加密处理、JWT、时间戳、模拟数据与信息提取等常用能力，支持直接编辑、运行、预览和下载结果。',
+      '集中提供文本处理、格式化、编码、加密、JWT、时间戳、模拟数据、正则测试、压缩和代码运行等常用能力，支持直接编辑、运行、预览和下载结果。',
     sidebarMenuTitle: '功能分组',
     browseOnly: '目录浏览',
     favorites: '收藏页',
@@ -124,7 +140,7 @@ const UI_COPY = {
     sidebarBadge: 'Dev Toolbox',
     sidebarTitle: 'Dev Toolbox',
     sidebarDescription:
-      'A focused toolbox for text, JSON, encoding, crypto, JWT, timestamps, mock data, extraction, preview, and downloadable results.',
+      'A focused toolbox for text, formatting, encoding, crypto, JWT, timestamps, mock data, regex testing, compression, previews, and code running.',
     sidebarMenuTitle: 'Tool Groups',
     browseOnly: 'Browse',
     favorites: 'Favorites',
@@ -696,7 +712,7 @@ export default function App() {
         theme={theme}
       />
 
-      <main className="ml-72 min-h-screen px-8 pb-10 pt-24">
+      <main className="ml-48 min-h-screen px-7 pb-10 pt-24">
         {isBrowseOnly ? (
           <section className="space-y-8">
             {(activeGroup === 'favorites'

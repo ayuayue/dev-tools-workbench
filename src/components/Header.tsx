@@ -34,7 +34,7 @@ export default function Header({
     'inline-flex h-11 items-center gap-2 rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 text-sm font-semibold text-on-surface-variant transition-colors hover:text-on-surface';
 
   return (
-    <header className="fixed top-0 right-0 left-72 z-50 border-b border-outline-variant/20 bg-background/80 px-8 py-4 backdrop-blur-xl shadow-[0_24px_24px_-12px_rgba(163,166,255,0.05)]">
+    <header className="fixed top-0 right-0 left-48 z-50 border-b border-outline-variant/20 bg-background/80 px-7 py-4 backdrop-blur-xl shadow-[0_24px_24px_-12px_rgba(163,166,255,0.05)]">
       <div className="flex items-center gap-4">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
