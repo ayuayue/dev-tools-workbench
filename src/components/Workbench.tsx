@@ -202,6 +202,19 @@ function renderField(
           value={String(value ?? '')}
         />
         <SuggestionList suggestions={suggestions} onSelect={(nextValue) => onFieldChange(field.name, nextValue)} />
+        {'helper' in field && field.helper ? (
+          <p className="text-xs text-on-surface-variant/70">
+            {String(field.helper).split(/(https?:\/\/[^\s]+)/).map((part, i) =>
+              part.match(/^https?:\/\//) ? (
+                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">
+                  {part}
+                </a>
+              ) : (
+                <span key={i}>{part}</span>
+              )
+            )}
+          </p>
+        ) : null}
       </label>
     );
   }
@@ -217,6 +230,19 @@ function renderField(
         value={String(value ?? '')}
       />
       <SuggestionList suggestions={suggestions} onSelect={(nextValue) => onFieldChange(field.name, nextValue)} />
+      {'helper' in field && field.helper ? (
+        <p className="text-xs text-on-surface-variant/70">
+          {field.helper.split(/(https?:\/\/[^\s]+)/).map((part, i) =>
+            part.match(/^https?:\/\//) ? (
+              <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">
+                {part}
+              </a>
+            ) : (
+              <span key={i}>{part}</span>
+            )
+          )}
+        </p>
+      ) : null}
     </label>
   );
 }

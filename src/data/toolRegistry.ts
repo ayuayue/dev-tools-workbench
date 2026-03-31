@@ -13,6 +13,7 @@ import {
   TextCursorInput,
   Waypoints,
 } from 'lucide-react';
+import { JSONPath } from 'jsonpath-plus';
 
 export type ToolGroupId =
   | 'all'
@@ -55,6 +56,7 @@ export type ToolField =
       placeholder?: string;
       required?: boolean;
       defaultValue?: string;
+      helper?: string;
     }
   | {
       name: string;
@@ -1340,49 +1342,14 @@ function evaluateJsonExpression(source: unknown, expression: string): unknown {
     throw new Error('表达式必须以 $ 开头。');
   }
 
-  let current: unknown = source;
-  let index = 1;
-
-  while (index < text.length) {
-    if (text[index] === '.') {
-      index += 1;
-      let property = '';
-      while (index < text.length && /[\w$]/.test(text[index])) {
-        property += text[index];
-        index += 1;
-      }
-      if (!property) {
-        throw new Error('JSON 表达式格式不正确。');
-      }
-      if (property === 'length' && (Array.isArray(current) || typeof current === 'string')) {
-        current = current.length;
-        continue;
-      }
-      current = (current as Record<string, unknown> | undefined)?.[property];
-      continue;
-    }
-
-    if (text[index] === '[') {
-      const endIndex = text.indexOf(']', index);
-      if (endIndex === -1) {
-        throw new Error('JSON 表达式格式不正确。');
-      }
-
-      const token = text.slice(index + 1, endIndex).trim();
-      if (/^\d+$/.test(token)) {
-        current = (current as unknown[] | undefined)?.[Number(token)];
-      } else {
-        const key = token.replace(/^['"]|['"]$/g, '');
-        current = (current as Record<string, unknown> | undefined)?.[key];
-      }
-      index = endIndex + 1;
-      continue;
-    }
-
-    throw new Error('JSON 表达式格式不正确。');
+  const results = JSONPath({ path: text, json: source as object, resultType: 'all' }) as Array<{ value: unknown }>;
+  if (!results || results.length === 0) {
+    return undefined;
   }
-
-  return current;
+  if (results.length === 1) {
+    return results[0].value;
+  }
+  return results.map((item: { value: unknown }) => item.value);
 }
 
 function md5(text: string) {
@@ -2030,7 +1997,14 @@ export const TOOLS: ToolDefinition[] = [
       const current = ensureText(fields.query).trim().toLowerCase();
       return Array.from(buildJsonPathSuggestions(parsed)).filter((item) => !current || item.toLowerCase().includes(current));
     },
-    fields: [{name: 'query', label: '表达式', type: 'text', placeholder: '$.data.length', required: true}],
+    fields: [{
+      name: 'query',
+      label: '表达式',
+      type: 'text',
+      placeholder: '$.records[*].campusName',
+      required: true,
+      helper: '支持 JSONPath 语法，如 $.data[*].name。查看完整语法: https://jsonpath.com',
+    }],
     run({input, fields}) {
       const parsed = JSON.parse(ensureText(input));
       const result = evaluateJsonExpression(parsed, ensureText(fields.query));
