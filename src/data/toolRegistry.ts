@@ -1,17 +1,39 @@
 import {
+  ArrowUpDown,
+  BadgeCheck,
+  Binary,
+  BookOpen,
   Braces,
+  Brush,
+  Building2,
   CaseSensitive,
+  CalendarRange,
+  Clock3,
+  FileCode2,
+  FileDown,
   FileSearch,
   FileText,
   Fingerprint,
   Globe,
+  KeyRound,
+  Link,
   LucideIcon,
+  Mail,
+  MapPin,
+  Play,
+  ScanLine,
   ScanSearch,
+  ShieldEllipsis,
   ShieldCheck,
-  Sparkles,
+  Shrink,
+  Smartphone,
+  SquareAsterisk,
   TableProperties,
   TextCursorInput,
+  UserRound,
+  WholeWord,
   Waypoints,
+  Wand2,
 } from 'lucide-react';
 import { JSONPath } from 'jsonpath-plus';
 
@@ -34,6 +56,7 @@ export type ToolGroupId =
   | 'data'
   | 'extract'
   | 'generate';
+export type ToolModuleGroupId = Exclude<ToolGroupId, 'all' | 'favorites'>;
 export type ToolKind = 'transform' | 'extract' | 'generate';
 export type ToolLevel = 'core' | 'expert';
 export type ToolColor = 'primary' | 'secondary' | 'tertiary';
@@ -91,11 +114,16 @@ export type ToolField =
 
 export interface ToolWorkspaceConfig {
   showEditor?: boolean;
+  showFieldsPanel?: boolean;
   editorLabel?: string;
   editorTitle?: string;
   editorPlaceholder?: string;
   allowUseResult?: boolean;
   supportsClipboardImage?: boolean;
+  showResultOutput?: boolean;
+  preferPreviewLayout?: boolean;
+  previewMinHeight?: number;
+  allowPreviewFullscreen?: boolean;
 }
 
 export interface ToolRunContext {
@@ -130,7 +158,7 @@ export interface ToolDefinition {
   id: string;
   name: string;
   summary: string;
-  group: Exclude<ToolGroupId, 'all' | 'favorites'>;
+  group: ToolModuleGroupId;
   kind: ToolKind;
   level: ToolLevel;
   color: ToolColor;
@@ -144,7 +172,7 @@ export interface ToolDefinition {
 }
 
 export interface ToolGroup {
-  id: ToolGroupId;
+  id: ToolModuleGroupId;
   label: string;
   kicker: string;
   description: string;
@@ -162,18 +190,6 @@ export const STORAGE_KEYS = {
 export const MAX_RECENTS = 6;
 
 export const TOOL_GROUPS: ToolGroup[] = [
-  {
-    id: 'all',
-    label: '全部工具',
-    kicker: '完整目录',
-    description: '保留全部工具可见，主要依靠搜索和筛选定位。',
-  },
-  {
-    id: 'favorites',
-    label: '收藏工具',
-    kicker: 'favorites',
-    description: '集中查看你标记过的常用工具。',
-  },
   {
     id: 'text',
     label: '文本处理',
@@ -506,11 +522,7 @@ const TOOL_EN_LOCALES: Record<string, ToolLocale> = {
   'xml-minify-tool': {name: 'Minify XML', summary: 'Minify XML output.'},
   'run-code-preview': {
     name: 'Run HTML / JS / CSS',
-    summary: 'Preview HTML with accompanying CSS and JavaScript.',
-    fields: {
-      css: {label: 'CSS', placeholder: 'body { font-family: sans-serif; }'},
-      js: {label: 'JavaScript', placeholder: 'document.getElementById("app").textContent = "Hello";'},
-    },
+    summary: 'Write a full HTML document with style and script tags, then preview it instantly.',
   },
 };
 
@@ -1485,19 +1497,141 @@ function minifyCssText(input: string) {
     .trim();
 }
 
-function buildCodePreview(html: string, css: string, js: string) {
+function looksLikeJavaScriptSnippet(source: string) {
+  const text = ensureText(source).trim();
+  if (!text) {
+    return false;
+  }
+
+  return /(?:^|[\s;])(const|let|var|function|class|if|for|while|switch|try|import|export|await|return)\b|=>|console\.\w+\s*\(|document\.|window\.|JSON\.|new\s+[A-Z]/.test(
+    text,
+  );
+}
+
+function looksLikeCssSnippet(source: string) {
+  const text = ensureText(source).trim();
+  if (!text) {
+    return false;
+  }
+
+  return /[#.\w\-\[\]=:"']+\s*\{[\s\S]*\}/.test(text) && !/<[a-z][\s\S]*>/i.test(text);
+}
+
+function buildConsoleBridgeScript() {
+  return `
+(() => {
+  const mount = document.getElementById('__devtools_console__');
+  if (!mount) return;
+
+  const append = (type, args) => {
+    const line = document.createElement('div');
+    line.className = '__console_line __console_' + type;
+    line.textContent = args.map((arg) => {
+      if (typeof arg === 'string') return arg;
+      try { return JSON.stringify(arg, null, 2); } catch { return String(arg); }
+    }).join(' ');
+    mount.appendChild(line);
+  };
+
+  ['log', 'info', 'warn', 'error'].forEach((type) => {
+    const original = console[type].bind(console);
+    console[type] = (...args) => {
+      append(type, args);
+      original(...args);
+    };
+  });
+
+  window.addEventListener('error', (event) => {
+    append('error', [event.message]);
+  });
+})();
+`;
+}
+
+function buildCodePreview(source: string) {
+  const text = ensureText(source).trim();
+  if (!text) {
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+  </style>
+</head>
+<body>
+  <div>Hello playground</div>
+</body>
+</html>`;
+  }
+
+  if (/<(?:!doctype|html|head|body|style|script)\b/i.test(text)) {
+    return text;
+  }
+
+  if (looksLikeJavaScriptSnippet(text)) {
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; padding: 24px; background: #f8fafc; color: #0f172a; }
+    .panel { border: 1px solid #dbe4ee; border-radius: 16px; background: #ffffff; overflow: hidden; }
+    .panel h1 { margin: 0; padding: 14px 16px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; border-bottom: 1px solid #eef2f7; }
+    .console { min-height: 160px; padding: 12px 16px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+    .__console_line + .__console_line { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eef2f7; }
+    .__console_error { color: #b91c1c; }
+    .__console_warn { color: #b45309; }
+    .__console_info { color: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Console Output</h1>
+    <div class="console" id="__devtools_console__"></div>
+  </div>
+  <script>
+${buildConsoleBridgeScript()}
+  <\/script>
+  <script>
+${text}
+  <\/script>
+</body>
+</html>`;
+  }
+
+  if (looksLikeCssSnippet(text)) {
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+${text}
+  </style>
+</head>
+<body>
+  <main style="padding: 32px; font-family: sans-serif;">
+    <div class="preview-card">
+      <h1>CSS Preview</h1>
+      <p>当前输入看起来像纯 CSS，因此已自动生成示例容器供预览。</p>
+      <button>Preview Button</button>
+    </div>
+  </main>
+</body>
+</html>`;
+  }
+
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>${css}</style>
 </head>
 <body>
-${html}
-<script>
-${js}
-<\/script>
+${text}
 </body>
 </html>`;
 }
@@ -1544,7 +1678,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: ScanLine,
     tags: ['trim', 'whitespace'],
     fields: [],
     run({input}) {
@@ -1563,7 +1697,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'primary',
-    icon: FileText,
+    icon: WholeWord,
     tags: ['space', 'tabs'],
     fields: [],
     run({input}) {
@@ -1582,7 +1716,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'primary',
-    icon: Waypoints,
+    icon: SquareAsterisk,
     tags: ['lines', 'blank'],
     fields: [],
     run({input}) {
@@ -1620,7 +1754,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Braces,
+    icon: Binary,
     tags: ['slug', 'variable'],
     fields: [],
     run({input}) {
@@ -1639,7 +1773,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Globe,
+    icon: Link,
     tags: ['slug', 'url'],
     fields: [],
     run({input}) {
@@ -1658,7 +1792,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Waypoints,
+    icon: ArrowUpDown,
     tags: ['lines', 'sort'],
     fields: [
       {
@@ -1714,7 +1848,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: FileText,
+    icon: FileDown,
     tags: ['download', 'file', 'text'],
     fields: [
       {name: 'fileName', label: '文件名', type: 'text', placeholder: '默认使用当前时间戳'},
@@ -1743,7 +1877,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Globe,
+    icon: Link,
     tags: ['url', 'encode'],
     fields: [],
     run({input}) {
@@ -1762,7 +1896,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Globe,
+    icon: Link,
     tags: ['url', 'decode'],
     fields: [],
     run({input}) {
@@ -1781,7 +1915,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Fingerprint,
+    icon: Binary,
     tags: ['base64', 'encode'],
     fields: [],
     run({input}) {
@@ -1800,7 +1934,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Fingerprint,
+    icon: Binary,
     tags: ['base64', 'decode'],
     fields: [],
     run({input}) {
@@ -1819,7 +1953,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'secondary',
-    icon: Fingerprint,
+    icon: Wand2,
     tags: ['file', 'image', 'encode'],
     workspace: {
       showEditor: false,
@@ -1853,7 +1987,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'secondary',
-    icon: Fingerprint,
+    icon: FileDown,
     tags: ['file', 'image', 'decode'],
     fields: [
       {name: 'fileName', label: '文件名', type: 'text', placeholder: '默认使用当前时间戳'},
@@ -1921,7 +2055,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: Braces,
+    icon: Globe,
     tags: ['json', 'pretty'],
     featured: true,
     fields: [],
@@ -1941,7 +2075,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: Braces,
+    icon: Shrink,
     tags: ['json', 'minify'],
     fields: [],
     run({input}) {
@@ -1960,7 +2094,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'secondary',
-    icon: Braces,
+    icon: Fingerprint,
     tags: ['json', 'pretty'],
     fields: [],
     run({input}) {
@@ -1986,7 +2120,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'secondary',
-    icon: Braces,
+    icon: ScanSearch,
     tags: ['json', 'extract'],
     featured: true,
     getFieldSuggestions({input, fields}, fieldName) {
@@ -2022,7 +2156,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: FileText,
+    icon: Brush,
     tags: ['html', 'escape'],
     fields: [],
     run({input}) {
@@ -2041,7 +2175,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: FileText,
+    icon: Braces,
     tags: ['html', 'decode'],
     fields: [],
     run({input}) {
@@ -2098,7 +2232,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: Braces,
+    icon: Play,
     tags: ['xml', 'minify'],
     fields: [],
     run({input}) {
@@ -2117,7 +2251,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'secondary',
-    icon: ShieldCheck,
+    icon: KeyRound,
     tags: ['hash', 'sha', 'encrypt'],
     fields: [
       {
@@ -2164,7 +2298,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'secondary',
-    icon: ShieldCheck,
+    icon: ShieldEllipsis,
     tags: ['hmac', 'signature'],
     fields: [
       {
@@ -2205,7 +2339,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'secondary',
-    icon: ShieldCheck,
+    icon: ShieldEllipsis,
     tags: ['aes', 'encrypt'],
     fields: [{name: 'secret', label: '口令', type: 'text', placeholder: 'strong-password', required: true}],
     async run({input, fields}) {
@@ -2224,7 +2358,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'core',
     color: 'secondary',
-    icon: ShieldCheck,
+    icon: KeyRound,
     tags: ['aes', 'decrypt'],
     fields: [{name: 'secret', label: '口令', type: 'text', placeholder: 'strong-password', required: true}],
     async run({input, fields}) {
@@ -2243,7 +2377,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'tertiary',
-    icon: ShieldCheck,
+    icon: ScanSearch,
     tags: ['jwt', 'encode', 'token'],
     fields: [
       {
@@ -2320,7 +2454,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
-    icon: ScanSearch,
+    icon: Mail,
     tags: ['email', 'regex'],
     fields: [],
     run({input}) {
@@ -2340,7 +2474,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
-    icon: Globe,
+    icon: Link,
     tags: ['url', 'links'],
     featured: true,
     fields: [],
@@ -2361,7 +2495,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
-    icon: ScanSearch,
+    icon: Binary,
     tags: ['numbers', 'metrics'],
     fields: [],
     run({input}) {
@@ -2404,7 +2538,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'extract',
     level: 'core',
     color: 'tertiary',
-    icon: ScanSearch,
+    icon: ScanLine,
     tags: ['regex', 'capture', 'replace'],
     featured: true,
     fields: [
@@ -2446,7 +2580,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: FileText,
+    icon: Shrink,
     tags: ['html', 'minify'],
     featured: true,
     fields: [],
@@ -2466,7 +2600,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: FileText,
+    icon: FileCode2,
     tags: ['html', 'pretty'],
     fields: [],
     async run({input}) {
@@ -2485,7 +2619,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: Braces,
+    icon: Shrink,
     tags: ['json', 'minify'],
     fields: [],
     async run({input}) {
@@ -2504,7 +2638,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: Braces,
+    icon: FileCode2,
     tags: ['json', 'pretty'],
     fields: [],
     async run({input}) {
@@ -2523,7 +2657,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: FileText,
+    icon: Shrink,
     tags: ['text', 'minify'],
     fields: [],
     run({input}) {
@@ -2542,7 +2676,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: FileText,
+    icon: FileCode2,
     tags: ['text', 'pretty'],
     fields: [],
     async run({input}) {
@@ -2561,7 +2695,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'transform',
     level: 'expert',
     color: 'secondary',
-    icon: Braces,
+    icon: FileCode2,
     tags: ['xml', 'pretty'],
     fields: [],
     run({input}) {
@@ -2575,26 +2709,44 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: 'run-code-preview',
     name: '运行 HTML / JS / CSS',
-    summary: '以 HTML 为主编辑区，配合 CSS 和 JS 代码直接在结果区预览页面效果。',
+    summary: '在一个编辑区中直接编写完整的 HTML、CSS、JS 内容，并即时预览页面效果。',
     group: 'code',
     kind: 'generate',
     level: 'core',
     color: 'tertiary',
-    icon: Globe,
+    icon: FileCode2,
     tags: ['html', 'css', 'json'],
     featured: true,
     workspace: {
-      editorLabel: 'HTML',
-      editorTitle: 'HTML',
-      editorPlaceholder: '<div id="app">Hello playground</div>',
+      showFieldsPanel: false,
+      editorLabel: 'HTML / CSS / JS',
+      editorTitle: 'HTML / CSS / JS',
+      editorPlaceholder: `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Playground</title>
+    <style>
+      body { font-family: sans-serif; padding: 32px; }
+      .card { padding: 24px; border-radius: 16px; background: #ecfeff; }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="app">Hello playground</div>
+    <script>
+      document.getElementById('app').insertAdjacentHTML('beforeend', '<p>Preview is ready.</p>');
+    <\/script>
+  </body>
+</html>`,
       allowUseResult: false,
+      showResultOutput: false,
+      preferPreviewLayout: true,
+      previewMinHeight: 560,
+      allowPreviewFullscreen: true,
     },
-    fields: [
-      {name: 'css', label: 'CSS', type: 'textarea', placeholder: 'body { font-family: sans-serif; }', rows: 7},
-      {name: 'js', label: 'JavaScript', type: 'textarea', placeholder: 'document.getElementById("app").textContent = "Hello";', rows: 7},
-    ],
-    run({input, fields}) {
-      const srcDoc = buildCodePreview(ensureText(input), ensureText(fields.css), ensureText(fields.js));
+    fields: [],
+    run({input}) {
+      const srcDoc = buildCodePreview(ensureText(input));
       return successResult({
         output: srcDoc,
         message: '已生成代码预览。',
@@ -2613,7 +2765,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: CalendarRange,
     tags: ['time', 'timestamp'],
     fields: [
       {
@@ -2643,7 +2795,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: CalendarRange,
     tags: ['time', 'iso'],
     fields: [],
     run() {
@@ -2661,7 +2813,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: CalendarRange,
     tags: ['time', 'local'],
     fields: [],
     run() {
@@ -2679,7 +2831,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['timestamp', 'iso'],
     fields: [],
     run({input}) {
@@ -2697,7 +2849,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['timestamp', 'local'],
     fields: [],
     run({input}) {
@@ -2715,7 +2867,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['iso', 'timestamp'],
     fields: [],
     run({input}) {
@@ -2738,7 +2890,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: ArrowUpDown,
     tags: ['timestamp', 'convert'],
     fields: [],
     run({input}) {
@@ -2760,7 +2912,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['timestamp', 'beijing'],
     fields: [],
     run({input}) {
@@ -2788,7 +2940,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['timestamp', 'iso', 'local'],
     fields: [],
     run({input}) {
@@ -2827,7 +2979,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Sparkles,
+    icon: Clock3,
     tags: ['timestamp', 'convert', 'local'],
     fields: [
       {
@@ -2875,7 +3027,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: UserRound,
     tags: ['username', 'mock'],
     workspace: {
       showEditor: false,
@@ -2917,7 +3069,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: Mail,
     tags: ['email', 'mock'],
     workspace: {
       showEditor: false,
@@ -2940,7 +3092,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: Smartphone,
     tags: ['phone', 'mock'],
     workspace: {
       showEditor: false,
@@ -2974,7 +3126,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: MapPin,
     tags: ['address', 'mock'],
     workspace: {
       showEditor: false,
@@ -3008,7 +3160,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: BadgeCheck,
     tags: ['id', 'card', 'mock'],
     workspace: {
       showEditor: false,
@@ -3042,7 +3194,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: BookOpen,
     tags: ['passport', 'mock'],
     workspace: {
       showEditor: false,
@@ -3064,7 +3216,7 @@ export const TOOLS: ToolDefinition[] = [
     kind: 'generate',
     level: 'core',
     color: 'primary',
-    icon: Fingerprint,
+    icon: Building2,
     tags: ['license', 'mock'],
     workspace: {
       showEditor: false,
@@ -3225,15 +3377,15 @@ export function validateTool(tool: ToolDefinition) {
 
 export function filterTools({
   search = '',
-  group = 'all',
+  group,
 }: {
   search?: string;
-  group?: ToolGroupId;
+  group?: ToolModuleGroupId;
 }) {
   const keyword = search.trim().toLowerCase();
 
   return TOOLS.filter((tool) => {
-    if (group !== 'all' && group !== 'favorites' && tool.group !== group) {
+    if (group && tool.group !== group) {
       return false;
     }
 

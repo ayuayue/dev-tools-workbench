@@ -94,42 +94,42 @@
   --theme-on-primary-fixed-variant: #0b5d4b;
   --theme-secondary-fixed: #4ea98f;
   --theme-secondary: #4ea98f;
-  --theme-surface-container-high: #e6f1ec;
-  --theme-surface-container-highest: #dceae4;
-  --theme-on-surface: #19352f;
+  --theme-surface-container-high: #d8e6df;
+  --theme-surface-container-highest: #cfded6;
+  --theme-on-surface: #102820;
   --theme-on-primary-fixed: #ffffff;
   --theme-on-primary: #ffffff;
-  --theme-surface-container-lowest: #f3faf6;
+  --theme-surface-container-lowest: #f0f7f3;
   --theme-inverse-on-surface: #eaf4ef;
   --theme-primary-dim: #5eb79d;
   --theme-surface-tint: #6fc3aa;
   --theme-error-container: #ffd9df;
   --theme-primary-container: #d2efe4;
   --theme-error: #d23d62;
-  --theme-background: #edf7f1;
+  --theme-background: #e3ece7;
   --theme-tertiary-fixed-dim: #d6a14a;
   --theme-secondary-dim: #4ea98f;
-  --theme-on-surface-variant: #5f7b73;
+  --theme-on-surface-variant: #48625a;
   --theme-on-background: #19352f;
-  --theme-surface-dim: #dce9e3;
+  --theme-surface-dim: #d2ded8;
   --theme-on-tertiary: #55370a;
   --theme-on-error-container: #7c1735;
-  --theme-surface-container-low: #f7fcf9;
+  --theme-surface-container-low: #eef5f1;
   --theme-on-tertiary-fixed: #41270a;
   --theme-on-secondary-fixed: #ffffff;
-  --theme-surface-variant: #cfddd8;
+  --theme-surface-variant: #c0d1ca;
   --theme-tertiary-container: #f5dfb5;
   --theme-primary-fixed: #bfe8d9;
   --theme-tertiary-dim: #d6a14a;
-  --theme-surface-container: #eaf4ee;
+  --theme-surface-container: #e1ebe6;
   --theme-on-secondary: #ffffff;
-  --theme-surface: #edf7f1;
+  --theme-surface: #e6efe9;
   --theme-primary-fixed-dim: #8fd0bb;
-  --theme-outline: #8aa59d;
+  --theme-outline: #6e877f;
   --theme-primary: #6fc3aa;
   --theme-error-dim: #c83a5d;
   --theme-on-tertiary-container: #694510;
-  --theme-surface-bright: #fbfefc;
+  --theme-surface-bright: #f6fbf8;
   --theme-tertiary-fixed: #e8bd73;
   --theme-on-tertiary-fixed-variant: #6b4910;
   --theme-inverse-primary: #a7dcc8;
@@ -140,7 +140,7 @@
   --theme-on-secondary-fixed-variant: #ffffff;
   --theme-on-primary-container: #165444;
   --theme-on-secondary-container: #1f6150;
-  --theme-outline-variant: #bfd0ca;
+  --theme-outline-variant: #a6bbb3;
 }
 
 [data-theme="dark"] {
@@ -173,9 +173,9 @@
   --theme-on-primary-fixed-variant: #0e009d;
   --theme-secondary-fixed: #69f6b8;
   --theme-secondary: #69f6b8;
-  --theme-surface-container-high: #141f38;
-  --theme-surface-container-highest: #192540;
-  --theme-on-surface: #dee5ff;
+  --theme-surface-container-high: #162133;
+  --theme-surface-container-highest: #1b283d;
+  --theme-on-surface: #e6edff;
   --theme-on-primary-fixed: #000000;
   --theme-on-primary: #0f00a4;
   --theme-surface-container-lowest: #000000;
@@ -188,27 +188,27 @@
   --theme-background: #060e20;
   --theme-tertiary-fixed-dim: #e79400;
   --theme-secondary-dim: #58e7ab;
-  --theme-on-surface-variant: #a3aac4;
+  --theme-on-surface-variant: #b4bdd8;
   --theme-on-background: #dee5ff;
   --theme-surface-dim: #060e20;
   --theme-on-tertiary: #573500;
   --theme-on-error-container: #ffb2b9;
-  --theme-surface-container-low: #091328;
+  --theme-surface-container-low: #0b1528;
   --theme-on-tertiary-fixed: #2a1700;
   --theme-on-secondary-fixed: #00452d;
-  --theme-surface-variant: #192540;
+  --theme-surface-variant: #1d2a43;
   --theme-tertiary-container: #f8a010;
   --theme-primary-fixed: #9396ff;
   --theme-tertiary-dim: #e79400;
-  --theme-surface-container: #0f1930;
+  --theme-surface-container: #111d32;
   --theme-on-secondary: #005a3c;
   --theme-surface: #060e20;
   --theme-primary-fixed-dim: #8387ff;
-  --theme-outline: #6d758c;
+  --theme-outline: #8390aa;
   --theme-primary: #a3a6ff;
   --theme-error-dim: #d73357;
   --theme-on-tertiary-container: #4a2c00;
-  --theme-surface-bright: #1f2b49;
+  --theme-surface-bright: #24324d;
   --theme-tertiary-fixed: #f8a010;
   --theme-on-tertiary-fixed-variant: #563400;
   --theme-inverse-primary: #494bd7;
@@ -219,7 +219,7 @@
   --theme-on-secondary-fixed-variant: #006544;
   --theme-on-primary-container: #0a0081;
   --theme-on-secondary-container: #e1ffec;
-  --theme-outline-variant: #40485d;
+  --theme-outline-variant: #55617a;
 }
 
 [data-theme="light"][data-accent="mint"] {
@@ -735,9 +735,23 @@
   body {
     @apply bg-background text-on-surface font-body selection:bg-primary/30;
     background-image:
-      radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 26%),
-      radial-gradient(circle at 82% 6%, color-mix(in srgb, var(--color-secondary) 10%, transparent), transparent 24%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 32%);
+      linear-gradient(180deg, color-mix(in srgb, var(--color-surface-container-highest) 58%, transparent), transparent 22%),
+      linear-gradient(90deg, color-mix(in srgb, var(--color-outline-variant) 12%, transparent) 1px, transparent 1px),
+      linear-gradient(color-mix(in srgb, var(--color-outline-variant) 10%, transparent) 1px, transparent 1px),
+      radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 24%),
+      radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--color-secondary) 8%, transparent), transparent 22%);
+    background-size: auto, 24px 24px, 24px 24px, auto, auto;
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-background) 72%, transparent), transparent 18%, transparent 82%, color-mix(in srgb, var(--color-surface-container-highest) 38%, transparent));
+    opacity: 0.9;
+    z-index: -1;
   }
 }
 
@@ -751,5 +765,5 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(163, 166, 255, 0.2) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-outline) 72%, transparent) transparent;
 }

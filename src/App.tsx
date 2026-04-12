@@ -1,10 +1,12 @@
-import {startTransition, useDeferredValue, useEffect, useState} from 'react';
-import {GripVertical} from 'lucide-react';
-import {motion} from 'motion/react';
+import type {ComponentType} from 'react';
+import {useDeferredValue, useEffect, useState, useCallback} from 'react';
+import {GripVertical, Plus, X} from 'lucide-react';
+import {motion, AnimatePresence} from 'motion/react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ToolCard from './components/ToolCard';
 import Workbench from './components/Workbench';
+import {closeAllTabs, closeOtherTabs, ensureToolTabState, switchTabTool, TabState, ToolTabState} from './appTabState';
 import {
   executeTool,
   FEATURED_TOOL_IDS,
@@ -17,9 +19,9 @@ import {
   STORAGE_KEYS,
   AppLanguage as RegistryLanguage,
   ToolFieldValue,
+  ToolModuleGroupId,
   TOOL_GROUPS,
   ToolDefinition,
-  ToolGroupId,
   ToolResult,
   TOOLS,
 } from './data/toolRegistry';
@@ -27,15 +29,14 @@ import {
 type AppLanguage = RegistryLanguage;
 type ThemeAccent = 'mint' | 'sky' | 'amber' | 'rose' | 'slate' | 'github';
 
-const GROUP_TRANSLATIONS: Record<ToolGroupId, Record<AppLanguage, {label: string; kicker: string; description: string}>> = {
-  all: {
-    zh: {label: '全部工具', kicker: '完整目录', description: '保留全部工具可见，主要依靠搜索和筛选定位。'},
-    en: {label: 'All Tools', kicker: 'catalog', description: 'Browse the full toolbox and narrow it down with search.'},
-  },
-  favorites: {
-    zh: {label: '收藏工具', kicker: 'favorites', description: '集中查看你标记过的常用工具。'},
-    en: {label: 'Favorites', kicker: 'favorites', description: 'Keep your bookmarked tools in one place.'},
-  },
+const TAB_STORAGE_KEY = 'dev-tools2.tabs.v2';
+const ACTIVE_TAB_STORAGE_KEY = 'dev-tools2.active-tab.v2';
+
+function generateTabId(): string {
+  return `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+const GROUP_TRANSLATIONS: Record<ToolModuleGroupId, Record<AppLanguage, {label: string; kicker: string; description: string}>> = {
   text: {
     zh: {label: '文本处理', kicker: '纯文本', description: '处理大小写、空白、行序、提取、替换、正则抽取与基础文本整理。'},
     en: {label: 'Text', kicker: 'plain text', description: 'Whitespace cleanup, extraction, casing, regex helpers, and common text tasks.'},
@@ -114,11 +115,12 @@ const UI_COPY = {
     sidebarDescription:
       '集中提供文本处理、格式化、编码、加密、JWT、时间戳、模拟数据、正则测试、压缩和代码运行等常用能力，支持直接编辑、运行、预览和下载结果。',
     sidebarMenuTitle: '功能分组',
-    browseOnly: '目录浏览',
-    favorites: '收藏页',
     chooseTool: '请选择工具',
     toolsCount: (count: number) => `${count} 个工具`,
     dragToReorder: '可拖动排序',
+    searchResults: '搜索结果',
+    searchResultsHint: '顶部搜索会跨工具模块查找名称、标签、说明和字段。',
+    noSearchResults: '没有找到匹配工具，换个关键词试试。',
     dark: '暗色',
     light: '亮色',
     accentLabel: '主题色',
@@ -129,6 +131,17 @@ const UI_COPY = {
       rose: '雾玫红',
       slate: '青灰蓝',
       github: 'GitHub 亮色',
+    },
+    newTab: '新建标签页',
+    closeTab: '关闭标签',
+    closeOtherTabs: '关闭其他',
+    closeAllTabs: '关闭全部',
+    untitled: '未命名',
+    settingsMenu: {
+      export: '导出配置',
+      import: '导入配置',
+      about: '关于',
+      version: '版本 0.2.0',
     },
   },
   en: {
@@ -142,14 +155,21 @@ const UI_COPY = {
     sidebarDescription:
       'A focused toolbox for text, formatting, encoding, crypto, JWT, timestamps, mock data, regex testing, compression, previews, and code running.',
     sidebarMenuTitle: 'Tool Groups',
-    browseOnly: 'Browse',
-    favorites: 'Favorites',
     chooseTool: 'Choose a tool',
     toolsCount: (count: number) => `${count} tools`,
     dragToReorder: 'Drag to reorder',
+    searchResults: 'Search Results',
+    searchResultsHint: 'The top search scans tool names, tags, summaries, and field labels across modules.',
+    noSearchResults: 'No matching tools found. Try another keyword.',
     dark: 'Dark',
     light: 'Light',
     accentLabel: 'Accent',
+    settingsMenu: {
+      export: 'Export Config',
+      import: 'Import Config',
+      about: 'About',
+      version: 'Version 0.2.0',
+    },
     accentOptions: {
       mint: 'Mint',
       sky: 'Sky',
@@ -158,6 +178,11 @@ const UI_COPY = {
       slate: 'Slate',
       github: 'GitHub Light',
     },
+    newTab: 'New Tab',
+    closeTab: 'Close tab',
+    closeOtherTabs: 'Close Others',
+    closeAllTabs: 'Close All',
+    untitled: 'Untitled',
   },
 } satisfies Record<
   AppLanguage,
@@ -171,15 +196,27 @@ const UI_COPY = {
     sidebarTitle: string;
     sidebarDescription: string;
     sidebarMenuTitle: string;
-    browseOnly: string;
-    favorites: string;
     chooseTool: string;
     toolsCount: (count: number) => string;
     dragToReorder: string;
+    searchResults: string;
+    searchResultsHint: string;
+    noSearchResults: string;
     dark: string;
     light: string;
     accentLabel: string;
     accentOptions: Record<ThemeAccent, string>;
+    newTab: string;
+    closeTab: string;
+    closeOtherTabs: string;
+    closeAllTabs: string;
+    untitled: string;
+    settingsMenu: {
+      export: string;
+      import: string;
+      about: string;
+      version: string;
+    };
   }
 >;
 
@@ -220,9 +257,9 @@ function readStoredLanguage(): AppLanguage {
 function readStoredAccent(): ThemeAccent {
   try {
     const value = window.localStorage.getItem(STORAGE_KEYS.accent);
-    return value === 'sky' || value === 'amber' || value === 'rose' || value === 'slate' || value === 'github' ? value : 'mint';
+    return value === 'sky' || value === 'amber' || value === 'rose' || value === 'slate' || value === 'github' || value === 'mint' ? value : 'github';
   } catch {
-    return 'mint';
+    return 'github';
   }
 }
 
@@ -253,17 +290,96 @@ function writeStoredOrders(orders: Record<string, string[]>) {
   window.localStorage.setItem(STORAGE_KEYS.toolOrders, JSON.stringify(orders));
 }
 
-function buildStats(text: string) {
-  const source = String(text ?? '');
-  const words = source.trim() ? source.trim().split(/\s+/).filter(Boolean).length : 0;
-  const lines = source ? source.split(/\r?\n/).length : 0;
-  const chars = source.length;
-  const bytes = new TextEncoder().encode(source).length;
-  return {chars, words, lines, bytes};
+function readStoredTabs(): TabState[] {
+  try {
+    const raw = window.localStorage.getItem(TAB_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((t): t is TabState => t && typeof t.id === 'string' && typeof t.toolId === 'string')
+      .map((tab) => {
+        if (tab.toolStates && typeof tab.toolStates === 'object') {
+          return tab;
+        }
+
+        const legacyTab = tab as TabState & {
+          fieldValues?: Record<string, ToolFieldValue>;
+          result?: ToolResult;
+          resultVersion?: number;
+          isRunning?: boolean;
+        };
+
+        return {
+          id: legacyTab.id,
+          toolId: legacyTab.toolId,
+          toolName: legacyTab.toolName,
+          editorText: legacyTab.editorText ?? DEFAULT_EDITOR_TEXT,
+          toolStates: {
+            [legacyTab.toolId]: {
+              fieldValues: legacyTab.fieldValues ?? {},
+              result:
+                legacyTab.result ?? {
+                  ok: true,
+                  output: '',
+                  mode: 'result',
+                  message: UI_COPY[readStoredLanguage()].ready,
+                },
+              resultVersion: legacyTab.resultVersion ?? 0,
+              isRunning: legacyTab.isRunning ?? false,
+            },
+          },
+        };
+      });
+  } catch {
+    return [];
+  }
 }
 
-function formatGroupLabel(groupId: string, lang: AppLanguage) {
-  return GROUP_TRANSLATIONS[groupId as ToolGroupId]?.[lang]?.label ?? groupId;
+function writeStoredTabs(tabs: TabState[]) {
+  try {
+    window.localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(tabs));
+  } catch {
+    // ignore
+  }
+}
+
+function readStoredActiveTab(): string {
+  try {
+    return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredActiveTab(tabId: string) {
+  try {
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+  } catch {
+    // ignore
+  }
+}
+
+function createDefaultResult(lang: AppLanguage): ToolResult {
+  return {
+    ok: true,
+    output: '',
+    mode: 'result',
+    message: UI_COPY[lang].ready,
+  };
+}
+
+function createDefaultToolTabState(tool: ToolDefinition, lang: AppLanguage): ToolTabState {
+  return {
+    fieldValues: getDefaultFieldValues(tool),
+    result: createDefaultResult(lang),
+    resultVersion: 0,
+    isRunning: false,
+  };
+}
+
+function formatGroupLabel(groupId: ToolModuleGroupId, lang: AppLanguage) {
+  return GROUP_TRANSLATIONS[groupId][lang].label;
 }
 
 function formatKindLabel(kind: ToolDefinition['kind'], lang: AppLanguage) {
@@ -273,22 +389,18 @@ function formatKindLabel(kind: ToolDefinition['kind'], lang: AppLanguage) {
   return kind === 'transform' ? '转换' : kind === 'extract' ? '提取' : '生成';
 }
 
-function isModuleGroup(groupId: ToolGroupId): groupId is Exclude<ToolGroupId, 'all' | 'favorites'> {
-  return groupId !== 'all' && groupId !== 'favorites';
-}
-
-function getGroupBaseOrder(groupId: Exclude<ToolGroupId, 'all' | 'favorites'>) {
+function getGroupBaseOrder(groupId: ToolModuleGroupId) {
   return TOOLS.filter((tool) => tool.group === groupId).map((tool) => tool.id);
 }
 
-function mergeGroupOrder(groupId: Exclude<ToolGroupId, 'all' | 'favorites'>, storedOrder: string[] = []) {
+function mergeGroupOrder(groupId: ToolModuleGroupId, storedOrder: string[] = []) {
   const baseOrder = getGroupBaseOrder(groupId);
   return [...storedOrder.filter((toolId) => baseOrder.includes(toolId)), ...baseOrder.filter((toolId) => !storedOrder.includes(toolId))];
 }
 
 function sortToolsByOrder(
   tools: ToolDefinition[],
-  groupId: Exclude<ToolGroupId, 'all' | 'favorites'>,
+  groupId: ToolModuleGroupId,
   orders: Record<string, string[]>,
 ) {
   const mergedOrder = mergeGroupOrder(groupId, orders[groupId]);
@@ -301,34 +413,65 @@ function sortToolsByOrder(
   });
 }
 
-function getBrowseSections(search: string, orders: Record<string, string[]>) {
-  return TOOL_GROUPS.filter((group): group is (typeof TOOL_GROUPS)[number] & {id: Exclude<ToolGroupId, 'all' | 'favorites'>} => isModuleGroup(group.id))
-    .map((group) => ({
-      group,
-      tools: sortToolsByOrder(
-        filterTools({
-          group: group.id,
-          search,
-        }),
-        group.id,
-        orders,
-      ),
-    }))
-    .filter((section) => section.tools.length);
-}
-
 function getLocalizedFieldLabel(tool: ToolDefinition, fieldName: string, lang: AppLanguage) {
   const localizedTool = getLocalizedTool(tool, lang);
   return localizedTool.fields.find((field) => field.name === fieldName)?.label ?? fieldName;
 }
 
+// Export/Import configuration
+function exportConfig(lang: AppLanguage, favorites: string[], toolOrders: Record<string, string[]>, accent: ThemeAccent, theme: 'light' | 'dark') {
+  const config = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    language: lang,
+    theme,
+    accent,
+    favorites,
+    toolOrders,
+  };
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dev-tools-config-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importConfig(file: File): Promise<{lang: AppLanguage; favorites: string[]; toolOrders: Record<string, string[]>; accent: ThemeAccent; theme: 'light' | 'dark'} | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const config = JSON.parse(e.target?.result as string);
+        if (config.version && config.favorites && config.toolOrders) {
+          resolve({
+            lang: config.language || 'zh',
+            favorites: config.favorites,
+            toolOrders: config.toolOrders,
+            accent: config.accent || 'github',
+            theme: config.theme || 'light',
+          });
+        } else {
+          resolve(null);
+        }
+      } catch {
+        resolve(null);
+      }
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsText(file);
+  });
+}
+
 export default function App() {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
-  const [activeGroup, setActiveGroup] = useState<ToolGroupId>('all');
+  const normalizedSearch = deferredSearch.trim();
+  const isSearching = normalizedSearch.length > 0;
+  const [activeGroup, setActiveGroup] = useState<ToolModuleGroupId>(TOOL_GROUPS[0]?.id ?? 'text');
   const [favorites, setFavorites] = useState<string[]>(() => readStoredList(STORAGE_KEYS.favorites));
   const [recents, setRecents] = useState<string[]>(() => readStoredList(STORAGE_KEYS.recents));
-  const [editorText, setEditorText] = useState(DEFAULT_EDITOR_TEXT);
   const [lang, setLang] = useState<AppLanguage>(() => readStoredLanguage());
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
@@ -340,52 +483,37 @@ export default function App() {
   const [accent, setAccent] = useState<ThemeAccent>(() => readStoredAccent());
   const copy = UI_COPY[lang];
   const [toolOrders, setToolOrders] = useState<Record<string, string[]>>(() => readStoredOrders());
-  const [fieldValues, setFieldValues] = useState<Record<string, Record<string, ToolFieldValue>>>({});
-  const [activeToolId, setActiveToolId] = useState(FEATURED_TOOL_IDS[0]);
-  const [result, setResult] = useState<ToolResult>({
-    ok: true,
-    output: '',
-    mode: 'result',
-    message: UI_COPY[readStoredLanguage()].ready,
-  });
   const [draggedToolId, setDraggedToolId] = useState<string | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [resultVersion, setResultVersion] = useState(0);
   const [status, setStatus] = useState<{tone: 'info' | 'success' | 'error'; message: string}>({
     tone: 'info',
     message: UI_COPY[readStoredLanguage()].status,
   });
 
-  const rawVisibleTools = filterTools({
-    search: deferredSearch,
-    group: activeGroup,
-  });
-  const favoriteTools = rawVisibleTools.filter((tool) => favorites.includes(tool.id));
-  const visibleTools =
-    activeGroup === 'all'
-      ? rawVisibleTools
-      : activeGroup === 'favorites'
-        ? favoriteTools
-        : sortToolsByOrder(rawVisibleTools, activeGroup, toolOrders);
-  const browseSections = getBrowseSections(deferredSearch, toolOrders);
-  const isBrowseOnly = activeGroup === 'all' || activeGroup === 'favorites';
+  // Multi-tab state
+  const [tabs, setTabs] = useState<TabState[]>(() => readStoredTabs());
+  const [activeTabId, setActiveTabId] = useState<string>(() => readStoredActiveTab());
 
-  let activeTool = getToolById(activeToolId);
-  if (!isBrowseOnly && activeTool && !visibleTools.some((tool) => tool.id === activeTool.id)) {
-    activeTool = visibleTools[0] ?? null;
-  }
-  if (!isBrowseOnly && !activeTool) {
-    activeTool = visibleTools[0] ?? null;
-  }
+  // Persist tabs
+  useEffect(() => {
+    writeStoredTabs(tabs);
+  }, [tabs]);
 
   useEffect(() => {
-    if (isBrowseOnly) {
-      return;
-    }
-    if (activeTool && activeTool.id !== activeToolId) {
-      setActiveToolId(activeTool.id);
-    }
-  }, [activeTool, activeToolId, isBrowseOnly]);
+    writeStoredActiveTab(activeTabId);
+  }, [activeTabId]);
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0] || null;
+  const activeTool = activeTab ? getToolById(activeTab.toolId) : null;
+  const activeToolState = activeTab && activeTool ? activeTab.toolStates[activeTool.id] : null;
+
+  const visibleTools = isSearching
+    ? filterTools({search: normalizedSearch})
+    : sortToolsByOrder(
+        filterTools({group: activeGroup}),
+        activeGroup,
+        toolOrders,
+      );
+  const canDragSort = !isSearching;
 
   useEffect(() => {
     writeStoredList(STORAGE_KEYS.favorites, favorites);
@@ -413,23 +541,6 @@ export default function App() {
     window.localStorage.setItem(STORAGE_KEYS.language, lang);
   }, [lang]);
 
-  function ensureToolFields(tool: ToolDefinition | null) {
-    if (!tool) {
-      return {};
-    }
-
-    if (!fieldValues[tool.id]) {
-      const defaults = getDefaultFieldValues(tool);
-      setFieldValues((current) => ({
-        ...current,
-        [tool.id]: defaults,
-      }));
-      return defaults;
-    }
-
-    return fieldValues[tool.id];
-  }
-
   function updateStatus(tone: 'info' | 'success' | 'error', message: string) {
     setStatus({tone, message});
   }
@@ -438,33 +549,120 @@ export default function App() {
     setRecents((current) => [toolId, ...current.filter((item) => item !== toolId)].slice(0, MAX_RECENTS));
   }
 
-  function resetWorkbench(nextTool: ToolDefinition | null, message?: string) {
-    const localizedTool = nextTool ? getLocalizedTool(nextTool, lang) : null;
-    setIsRunning(false);
-    setResultVersion((current) => current + 1);
-    setResult({
-      ok: true,
-      output: '',
-      mode: 'result',
-      message:
-        message ??
-        (localizedTool
-          ? lang === 'zh'
-            ? `${localizedTool.name} 已就绪。运行后结果会显示在这里。`
-            : `${localizedTool.name} is ready. Results will appear here after you run it.`
-          : copy.ready),
+  const createTab = useCallback((tool: ToolDefinition) => {
+    const localized = getLocalizedTool(tool, lang);
+    const sharedEditorText = tabs.find((tab) => tab.id === activeTabId)?.editorText ?? DEFAULT_EDITOR_TEXT;
+    const newTab: TabState = {
+      id: generateTabId(),
+      toolId: tool.id,
+      toolName: localized.name,
+      editorText: sharedEditorText,
+      toolStates: {
+        [tool.id]: createDefaultToolTabState(tool, lang),
+      },
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    setActiveGroup(tool.group);
+    updateStatus('info', lang === 'zh' ? `已打开 ${localized.name}` : `Opened ${localized.name}`);
+  }, [activeTabId, lang, tabs]);
+
+  const closeTab = useCallback((tabId: string) => {
+    setTabs((prev) => {
+      const index = prev.findIndex((t) => t.id === tabId);
+      if (index === -1) return prev;
+      
+      const newTabs = prev.filter((t) => t.id !== tabId);
+      
+      if (tabId === activeTabId && newTabs.length > 0) {
+        const newIndex = Math.min(index, newTabs.length - 1);
+        setActiveTabId(newTabs[Math.max(0, newIndex)].id);
+      } else if (newTabs.length === 0) {
+        setActiveTabId('');
+      }
+      
+      return newTabs;
     });
-  }
+  }, [activeTabId]);
+
+  const closeTabsExceptActive = useCallback(() => {
+    if (!activeTabId) {
+      return;
+    }
+
+    setTabs((prev) => closeOtherTabs(prev, activeTabId));
+    updateStatus('info', lang === 'zh' ? '已关闭其他标签页。' : 'Closed other tabs.');
+  }, [activeTabId, lang]);
+
+  const handleCloseAllTabs = useCallback(() => {
+    const next = closeAllTabs();
+    setTabs(next.tabs);
+    setActiveTabId(next.activeTabId);
+    updateStatus('info', lang === 'zh' ? '已关闭全部标签页。' : 'Closed all tabs.');
+  }, [lang]);
+
+  const updateActiveTab = useCallback((updates: Partial<TabState>) => {
+    if (!activeTabId) return;
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTabId ? {...tab, ...updates} : tab
+      )
+    );
+  }, [activeTabId]);
+
+  const updateActiveToolState = useCallback((updater: (state: ToolTabState) => ToolTabState) => {
+    if (!activeTabId || !activeTool) {
+      return;
+    }
+
+    setTabs((prev) =>
+      prev.map((tab) => {
+        if (tab.id !== activeTabId) {
+          return tab;
+        }
+
+        const ensuredTab = ensureToolTabState(tab, activeTool.id, () => createDefaultToolTabState(activeTool, lang));
+        return {
+          ...ensuredTab,
+          toolStates: {
+            ...ensuredTab.toolStates,
+            [activeTool.id]: updater(ensuredTab.toolStates[activeTool.id]),
+          },
+        };
+      }),
+    );
+  }, [activeTabId, activeTool, lang]);
 
   function handleSelectTool(toolId: string) {
-    setActiveToolId(toolId);
+    const tool = getToolById(toolId);
+    if (!tool) {
+      return;
+    }
+
+    const localizedTool = getLocalizedTool(tool, lang);
+    setActiveGroup(tool.group);
+
+    if (!activeTabId) {
+      createTab(tool);
+      return;
+    }
+
+    setTabs((prev) =>
+      prev.map((tab) => {
+        if (tab.id !== activeTabId) {
+          return tab;
+        }
+
+        return switchTabTool(tab, {id: tool.id, name: localizedTool.name}, () => createDefaultToolTabState(tool, lang));
+      }),
+    );
+    updateStatus('info', lang === 'zh' ? `${localizedTool.name} 已就绪。需要的话先调整参数，再运行。` : `${localizedTool.name} is ready. Adjust inputs if needed, then run it.`);
+  }
+
+  function handleOpenToolInNewTab(toolId: string) {
     const tool = getToolById(toolId);
     if (tool) {
-      const localizedTool = getLocalizedTool(tool, lang);
-      setActiveGroup(tool.group);
-      ensureToolFields(tool);
-      resetWorkbench(tool);
-      updateStatus('info', lang === 'zh' ? `${localizedTool.name} 已就绪。需要的话先调整参数，再运行。` : `${localizedTool.name} is ready. Adjust inputs if needed, then run it.`);
+      createTab(tool);
     }
   }
 
@@ -478,15 +676,13 @@ export default function App() {
   }
 
   function handleFieldChange(name: string, value: ToolFieldValue) {
-    if (!activeTool) {
-      return;
-    }
+    if (!activeTool || !activeToolState) return;
 
-    setFieldValues((current) => ({
+    updateActiveToolState((current) => ({
       ...current,
-      [activeTool.id]: {
+      fieldValues: {
         ...getDefaultFieldValues(activeTool),
-        ...current[activeTool.id],
+        ...current.fieldValues,
         [name]: value,
       },
     }));
@@ -502,51 +698,36 @@ export default function App() {
   }
 
   function handleDownloadResult() {
-    if (!result.download) {
+    if (!activeToolState?.result.download) {
       updateStatus('error', lang === 'zh' ? '当前没有可下载的结果。' : 'There is no downloadable result yet.');
       return;
     }
 
     const href =
-      result.download.dataUrl ??
-      URL.createObjectURL(new Blob([result.download.content], {type: result.download.mimeType}));
+      activeToolState.result.download.dataUrl ??
+      URL.createObjectURL(new Blob([activeToolState.result.download.content], {type: activeToolState.result.download.mimeType}));
 
     const anchor = document.createElement('a');
     anchor.href = href;
-    anchor.download = result.download.fileName;
+    anchor.download = activeToolState.result.download.fileName;
     anchor.click();
 
-    if (!result.download.dataUrl) {
+    if (!activeToolState.result.download.dataUrl) {
       URL.revokeObjectURL(href);
     }
 
-    updateStatus('success', lang === 'zh' ? `已开始下载 ${result.download.fileName}。` : `Started downloading ${result.download.fileName}.`);
+    updateStatus('success', lang === 'zh' ? `已开始下载 ${activeToolState.result.download.fileName}。` : `Started downloading ${activeToolState.result.download.fileName}.`);
   }
 
-  function handleSelectGroup(groupId: ToolGroupId) {
+  function handleSelectGroup(groupId: ToolModuleGroupId) {
     setActiveGroup(groupId);
     setDraggedToolId(null);
-
-    if (groupId === 'all' || groupId === 'favorites') {
-      resetWorkbench(null, lang === 'zh' ? '当前是目录浏览模式，不显示执行结果。' : 'Catalog mode is active. Execution results are hidden here.');
-      updateStatus(
-        'info',
-        groupId === 'favorites'
-          ? lang === 'zh'
-            ? '收藏页只负责浏览和定位。'
-            : 'The favorites page is for browsing only.'
-          : lang === 'zh'
-            ? '全部工具页只负责浏览和定位。'
-            : 'The all-tools page is for browsing only.',
-      );
-      return;
-    }
 
     const nextTool =
       sortToolsByOrder(
         filterTools({
           group: groupId,
-          search: deferredSearch,
+          search: deferredSearch.trim(),
         }),
         groupId,
         toolOrders,
@@ -561,17 +742,14 @@ export default function App() {
       null;
 
     if (nextTool) {
-      setActiveToolId(nextTool.id);
-      ensureToolFields(nextTool);
-      resetWorkbench(nextTool);
-    } else {
-      resetWorkbench(null, lang === 'zh' ? '当前模块下没有匹配工具。' : 'No matching tools in this group.');
+      handleSelectTool(nextTool.id);
+      return;
     }
 
     updateStatus('info', lang === 'zh' ? `${formatGroupLabel(groupId, lang)} 已打开。` : `${formatGroupLabel(groupId, lang)} opened.`);
   }
 
-  function handleReorder(groupId: Exclude<ToolGroupId, 'all' | 'favorites'>, targetToolId: string) {
+  function handleReorder(groupId: ToolModuleGroupId, targetToolId: string) {
     if (!draggedToolId || draggedToolId === targetToolId) {
       return;
     }
@@ -625,36 +803,38 @@ export default function App() {
   }
 
   async function handleRun() {
-    if (!activeTool) {
+    if (!activeTool || !activeTab || !activeToolState) {
       updateStatus('error', lang === 'zh' ? '当前没有选中的工具。' : 'No tool is currently selected.');
       return;
     }
 
-    if (isRunning) {
+    if (activeToolState.isRunning) {
       return;
     }
 
-    const values = ensureToolFields(activeTool);
-    const validationError = validateFields(activeTool, values);
+    const validationError = validateFields(activeTool, activeToolState.fieldValues);
     if (validationError) {
       updateStatus('error', validationError);
       return;
     }
 
-    setIsRunning(true);
+    updateActiveToolState((current) => ({...current, isRunning: true}));
     const localizedTool = getLocalizedTool(activeTool, lang);
     updateStatus('info', lang === 'zh' ? `正在运行 ${localizedTool.name}...` : `Running ${localizedTool.name}...`);
     await new Promise((resolve) => window.setTimeout(resolve, 260));
 
     const rawExecution = await executeTool(activeTool, {
-      input: editorText,
-      fields: values,
+      input: activeTab.editorText,
+      fields: activeToolState.fieldValues,
     });
     const execution = localizeToolResult(rawExecution, lang);
 
-    setResult(execution);
-    setResultVersion((current) => current + 1);
-    setIsRunning(false);
+    updateActiveToolState((current) => ({
+      ...current,
+      result: execution,
+      resultVersion: current.resultVersion + 1,
+      isRunning: false,
+    }));
 
     if (!execution.ok) {
       updateStatus('error', execution.message);
@@ -666,16 +846,16 @@ export default function App() {
   }
 
   const activeGroupLabel = formatGroupLabel(activeGroup, lang);
+  const railTitle = isSearching ? copy.searchResults : activeGroupLabel;
+  const railHint = isSearching ? copy.searchResultsHint : copy.dragToReorder;
   const groupCounts = TOOL_GROUPS.reduce<Record<string, number>>((accumulator, group) => {
-    accumulator[group.id] = group.id === 'favorites' ? favorites.length : filterTools({group: group.id}).length;
+    accumulator[group.id] = filterTools({group: group.id}).length;
     return accumulator;
   }, {});
   const localizedGroups = TOOL_GROUPS.map((group) => ({
     ...group,
     ...GROUP_TRANSLATIONS[group.id][lang],
   }));
-
-  const activeFieldValues = activeTool ? ensureToolFields(activeTool) : {};
 
   return (
     <div className="min-h-screen bg-background font-body text-on-surface">
@@ -689,7 +869,7 @@ export default function App() {
           description: copy.sidebarDescription,
           menuTitle: copy.sidebarMenuTitle,
         }}
-        onSelectGroup={(groupId) => handleSelectGroup(groupId as ToolGroupId)}
+        onSelectGroup={(groupId) => handleSelectGroup(groupId as ToolModuleGroupId)}
       />
       <Header
         lang={lang}
@@ -698,173 +878,207 @@ export default function App() {
           accentOptions: copy.accentOptions,
           searchPlaceholder: copy.searchPlaceholder,
           themeValue: theme === 'light' ? copy.dark : copy.light,
+          settingsMenu: copy.settingsMenu,
         }}
         accent={accent}
         onAccentChange={(value) => setAccent(value as ThemeAccent)}
-        onSearchChange={(value) => {
-          startTransition(() => {
-            setSearch(value);
-          });
-        }}
+        onSearchChange={setSearch}
         onToggleLanguage={() => setLang((current) => (current === 'zh' ? 'en' : 'zh'))}
         onToggleTheme={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+        onExport={() => exportConfig(lang, favorites, toolOrders, accent, theme)}
+        onImport={() => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.json';
+          input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+              const config = await importConfig(file);
+              if (config) {
+                setLang(config.lang);
+                setFavorites(config.favorites);
+                setToolOrders(config.toolOrders);
+                setAccent(config.accent);
+                setTheme(config.theme);
+                updateStatus('success', lang === 'zh' ? '配置导入成功！' : 'Config imported successfully!');
+              } else {
+                updateStatus('error', lang === 'zh' ? '配置文件格式无效。' : 'Invalid config file format.');
+              }
+            }
+          };
+          input.click();
+        }}
         search={search}
         theme={theme}
       />
 
-      <main className="ml-48 min-h-screen px-7 pb-10 pt-24">
-        {isBrowseOnly ? (
-          <section className="space-y-8">
-            {(activeGroup === 'favorites'
-              ? [
-                  {
-                    group: localizedGroups.find((group) => group.id === 'favorites') ?? localizedGroups[0],
-                    tools: visibleTools,
-                  },
-                ]
-              : browseSections
-            ).map((section, sectionIndex) => (
-              <motion.section
-                animate={{opacity: 1, y: 0}}
-                className="space-y-4"
-                initial={{opacity: 0, y: 12}}
-                key={section.group.id}
-                transition={{delay: Math.min(sectionIndex * 0.03, 0.18)}}
-              >
-                <div className="flex flex-wrap items-end justify-between gap-4 border-b border-outline-variant/10 pb-3">
-                  <div>
-                    <p className="label-sm all-caps tracking-[0.22em] text-primary">{GROUP_TRANSLATIONS[section.group.id][lang].kicker}</p>
-                    <h3 className="mt-2 text-2xl font-black tracking-tight text-on-surface">{GROUP_TRANSLATIONS[section.group.id][lang].label}</h3>
-                    <p className="mt-2 text-sm text-on-surface-variant">
-                      {activeGroup === 'favorites' && !section.tools.length
-                        ? lang === 'zh'
-                          ? '你还没有收藏工具。点工具卡片右上角的星标，就能把它收进这里。'
-                          : 'You have no favorite tools yet. Star a tool card to collect it here.'
-                        : GROUP_TRANSLATIONS[section.group.id][lang].description}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-outline-variant/10 bg-surface-container-low px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
-                    {copy.toolsCount(section.tools.length)}
-                  </span>
-                </div>
-
-                <div className="grid gap-2.5 xl:grid-cols-2 2xl:grid-cols-3">
-                  {section.tools.map((rawTool) => {
-                    const tool = getLocalizedTool(rawTool, lang);
-                    return (
-                    <div
-                      className={`relative ${draggedToolId === tool.id ? 'opacity-60' : ''}`}
-                      key={tool.id}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleReorder(rawTool.group, rawTool.id)}
+      {/* Tabs Bar */}
+      {tabs.length > 0 && (
+        <div className="fixed left-48 right-0 top-[72px] z-40 mt-3 mb-2 border-b border-outline/30 bg-surface/94 backdrop-blur-sm shadow-[0_8px_18px_-18px_rgba(0,0,0,0.18)]">
+          <div className="flex items-center gap-1 px-4 py-2">
+            <div className="flex flex-1 items-center gap-1 overflow-x-auto">
+              <AnimatePresence mode="popLayout">
+                {tabs.map((tab) => {
+                  const isActive = tab.id === activeTabId;
+                  const tool = getToolById(tab.toolId);
+                  const Icon = tool?.icon;
+                  return (
+                    <motion.button
+                      key={tab.id}
+                      layout
+                      initial={{opacity: 0, x: -20}}
+                      animate={{opacity: 1, x: 0}}
+                      exit={{opacity: 0, x: 20}}
+                      onClick={() => setActiveTabId(tab.id)}
+                      className={`group flex min-w-0 max-w-[200px] shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left transition-all ${
+                        isActive
+                          ? 'border-primary/36 bg-surface-container-high text-primary shadow-[inset_0_0_0_1px_rgba(163,166,255,0.14)]'
+                          : 'bg-surface-container-low text-on-surface-variant shadow-[inset_0_0_0_1px_rgba(110,135,127,0.16)] hover:bg-surface-container-high'
+                      }`}
                     >
-                      <div className="pointer-events-none absolute right-14 top-3 z-10 rounded-lg border border-outline-variant/10 bg-background/75 px-1.5 py-1 text-on-surface-variant/70">
-                        <GripVertical className="h-3.5 w-3.5" />
-                      </div>
-                      <button
-                        className="absolute right-14 top-3 z-20 rounded-lg p-1.5 text-transparent"
-                        draggable
-                        onDragEnd={() => setDraggedToolId(null)}
-                        onDragStart={() => setDraggedToolId(rawTool.id)}
-                        type="button"
+                      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+                      <span className="flex-1 truncate text-xs font-medium">
+                        {tab.toolName}
+                      </span>
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.id);
+                        }}
+                        className={`ml-1 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer ${
+                          isActive ? 'hover:bg-primary/20' : 'hover:bg-surface-container-high'
+                        }`}
+                        title={copy.closeTab}
                       >
-                        drag
-                      </button>
-                      <ToolCard
-                        badges={[formatKindLabel(tool.kind, lang), ...tool.tags]}
-                        category={formatGroupLabel(tool.group, lang)}
-                        categoryColor={tool.color}
-                        compact
-                        description={tool.summary}
-                        icon={tool.icon}
-                        isFavorite={favorites.includes(rawTool.id)}
-                        onSelect={() => handleSelectTool(rawTool.id)}
-                        onToggleFavorite={() => handleToggleFavorite(rawTool.id)}
-                        title={tool.name}
-                      />
-                    </div>
-                  )})}
-                </div>
-              </motion.section>
-            ))}
-          </section>
-        ) : (
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(150px,180px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(160px,190px)]">
-            <Workbench
-              editorText={editorText}
-              fieldValues={activeFieldValues}
-              isRunning={isRunning}
-              onClearEditor={() => {
-                setEditorText('');
-                updateStatus('info', lang === 'zh' ? '编辑区已清空。' : 'Editor cleared.');
-              }}
-              onCopyInput={() => handleCopy(editorText, lang === 'zh' ? '已复制输入内容。' : 'Input copied.')}
-              onCopyResult={() => handleCopy(result.output, lang === 'zh' ? '已复制结果内容。' : 'Result copied.')}
-              onDownloadResult={handleDownloadResult}
-              onEditorChange={setEditorText}
-              onFieldChange={handleFieldChange}
-              onResetFields={() => {
-                if (!activeTool) {
-                  return;
+                        <X className="h-3 w-3" />
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+            <button
+              onClick={closeTabsExceptActive}
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-surface-container-low px-2.5 py-2 text-xs font-medium text-on-surface-variant shadow-[inset_0_0_0_1px_rgba(110,135,127,0.16)] transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={tabs.length <= 1 || !activeTabId}
+              title={copy.closeOtherTabs}
+              type="button"
+            >
+              {copy.closeOtherTabs}
+            </button>
+            <button
+              onClick={handleCloseAllTabs}
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-surface-container-low px-2.5 py-2 text-xs font-medium text-on-surface-variant shadow-[inset_0_0_0_1px_rgba(110,135,127,0.16)] transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={tabs.length === 0}
+              title={copy.closeAllTabs}
+              type="button"
+            >
+              {copy.closeAllTabs}
+            </button>
+            <button
+              onClick={() => {
+                // Open new tab with first visible tool or first tool overall
+                const toolToOpen = visibleTools[0] || TOOLS[0];
+                if (toolToOpen) {
+                  handleOpenToolInNewTab(toolToOpen.id);
                 }
-                setFieldValues((current) => ({
-                  ...current,
-                  [activeTool.id]: getDefaultFieldValues(activeTool),
-                }));
-                updateStatus('info', lang === 'zh' ? '已恢复默认参数。' : 'Fields reset to defaults.');
               }}
-              onRun={handleRun}
-              onUseResult={() => {
-                if (!result.output) {
-                  updateStatus('error', lang === 'zh' ? '当前没有可写回编辑区的结果。' : 'There is no result to write back into the editor.');
-                  return;
-                }
-                setEditorText(result.output);
-                updateStatus('success', lang === 'zh' ? '已将结果写回编辑区。' : 'The result has been written back into the editor.');
-              }}
-              result={result}
-              resultVersion={resultVersion}
-              status={status}
-              tool={activeTool ? getLocalizedTool(activeTool, lang) : null}
-              lang={lang}
-            />
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-surface-container-low px-2 py-2 text-xs font-medium text-on-surface-variant shadow-[inset_0_0_0_1px_rgba(110,135,127,0.16)] transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              title={copy.newTab}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <main className="ml-48 min-h-screen pl-4 pr-6 pb-10 pt-[140px]">
+        <section className="grid gap-5 xl:grid-cols-[1fr_300px]">
+            {activeTab && activeTool && activeToolState && (
+              <Workbench
+                editorText={activeTab.editorText}
+                fieldValues={activeToolState.fieldValues}
+                isRunning={activeToolState.isRunning}
+                onClearEditor={() => {
+                  updateActiveTab({editorText: ''});
+                  updateStatus('info', lang === 'zh' ? '编辑区已清空。' : 'Editor cleared.');
+                }}
+                onCopyInput={() => handleCopy(activeTab.editorText, lang === 'zh' ? '已复制输入内容。' : 'Input copied.')}
+                onCopyResult={() => handleCopy(activeToolState.result.output, lang === 'zh' ? '已复制结果内容。' : 'Result copied.')}
+                onDownloadResult={handleDownloadResult}
+                onEditorChange={(value) => updateActiveTab({editorText: value})}
+                onFieldChange={handleFieldChange}
+                onResetFields={() => {
+                  updateActiveToolState((current) => ({
+                    ...current,
+                    fieldValues: getDefaultFieldValues(activeTool),
+                  }));
+                  updateStatus('info', lang === 'zh' ? '已恢复默认参数。' : 'Fields reset to defaults.');
+                }}
+                onRun={handleRun}
+                onUseResult={() => {
+                  if (!activeToolState.result.output) {
+                    updateStatus('error', lang === 'zh' ? '当前没有可写回编辑区的结果。' : 'There is no result to write back into the editor.');
+                    return;
+                  }
+                  updateActiveTab({editorText: activeToolState.result.output});
+                  updateStatus('success', lang === 'zh' ? '已将结果写回编辑区。' : 'The result has been written back into the editor.');
+                }}
+                result={activeToolState.result}
+                resultVersion={activeToolState.resultVersion}
+                status={status}
+                tool={getLocalizedTool(activeTool, lang)}
+                lang={lang}
+              />
+            )}
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 <div>
-                  <h3 className="text-xl font-black tracking-tight text-on-surface">{activeGroupLabel}</h3>
-                  <p className="mt-1 text-xs text-on-surface-variant">{copy.dragToReorder}</p>
+                  <h3 className="text-xl font-black tracking-tight text-on-surface">{railTitle}</h3>
+                  <p className="mt-1 text-xs text-on-surface-variant">{railHint}</p>
                 </div>
                 <span className="ml-auto rounded-full border border-outline-variant/10 bg-surface-container-low px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">
                   {copy.toolsCount(visibleTools.length)}
                 </span>
               </div>
 
-              <div className="grid gap-1.5">
+              <div className="space-y-2.5">
+                {!visibleTools.length ? (
+                  <div className="rounded-2xl border border-outline-variant/12 bg-surface-container-low px-4 py-6 text-sm text-on-surface-variant">
+                    {copy.noSearchResults}
+                  </div>
+                ) : null}
                 {visibleTools.map((rawTool, index) => {
                   const tool = getLocalizedTool(rawTool, lang);
+                  const isOpen = tabs.some((t) => t.toolId === tool.id);
                   return (
                   <motion.div
                     animate={{opacity: 1, y: 0}}
                     className={`relative ${draggedToolId === tool.id ? 'opacity-60' : ''}`}
                     initial={{opacity: 0, y: 10}}
                     key={tool.id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => handleReorder(rawTool.group, rawTool.id)}
+                    onDragOver={canDragSort ? (event) => event.preventDefault() : undefined}
+                    onDrop={canDragSort ? () => handleReorder(rawTool.group, rawTool.id) : undefined}
                     transition={{delay: Math.min(index * 0.02, 0.14)}}
                   >
-                    <div className="pointer-events-none absolute right-11 top-2.5 z-10 rounded-lg border border-outline-variant/10 bg-background/75 px-1 py-0.5 text-on-surface-variant/70">
-                      <GripVertical className="h-3 w-3" />
-                    </div>
-                    <button
-                      className="absolute right-11 top-2.5 z-20 rounded-lg p-1 text-transparent"
-                      draggable
-                      onDragEnd={() => setDraggedToolId(null)}
-                      onDragStart={() => setDraggedToolId(rawTool.id)}
-                      type="button"
-                    >
-                      drag
-                    </button>
+                    {!isSearching ? (
+                      <>
+                        <div className="pointer-events-none absolute right-11 top-2.5 z-10 rounded-lg border border-outline-variant/10 bg-background/75 px-1 py-0.5 text-on-surface-variant/70">
+                          <GripVertical className="h-3 w-3" />
+                        </div>
+                        <button
+                          className="absolute right-11 top-2.5 z-20 rounded-lg p-1 text-transparent"
+                          draggable
+                          onDragEnd={() => setDraggedToolId(null)}
+                          onDragStart={() => setDraggedToolId(rawTool.id)}
+                          type="button"
+                        >
+                          drag
+                        </button>
+                      </>
+                    ) : null}
                     <ToolCard
                       badges={[formatKindLabel(tool.kind, lang), ...tool.tags]}
                       category={formatGroupLabel(tool.group, lang)}
@@ -874,7 +1088,9 @@ export default function App() {
                       icon={tool.icon}
                       isActive={rawTool.id === activeTool?.id}
                       isFavorite={favorites.includes(rawTool.id)}
+                      isOpen={isOpen}
                       onSelect={() => handleSelectTool(rawTool.id)}
+                      onOpenInNewTab={() => handleOpenToolInNewTab(rawTool.id)}
                       onToggleFavorite={() => handleToggleFavorite(rawTool.id)}
                       title={tool.name}
                       variant="rail"
@@ -884,8 +1100,10 @@ export default function App() {
               </div>
             </div>
           </section>
-        )}
       </main>
     </div>
   );
 }
+
+// Export functions for use in other components
+export {exportConfig, importConfig};
