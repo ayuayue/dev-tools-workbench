@@ -5,6 +5,7 @@ interface FeaturedSectionProps {
   featuredTools: ToolDefinition[];
   recentTool: ToolDefinition | null;
   favoriteCount: number;
+  lang: 'zh' | 'en';
   onSelectTool: (toolId: string) => void;
 }
 
@@ -12,6 +13,7 @@ export default function FeaturedSection({
   featuredTools,
   recentTool,
   favoriteCount,
+  lang,
   onSelectTool,
 }: FeaturedSectionProps) {
   const primary = featuredTools[0] ?? null;
@@ -19,7 +21,7 @@ export default function FeaturedSection({
   return (
     <section className="mb-10">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h3 className="label-sm all-caps font-bold tracking-[0.22em] text-on-surface-variant">快速入口</h3>
+        <h3 className="label-sm all-caps font-bold tracking-[0.22em] text-on-surface-variant">{lang === 'zh' ? '快速入口' : 'Quick Access'}</h3>
         <div className="h-px flex-1 bg-outline-variant/10" />
       </div>
 
@@ -31,15 +33,17 @@ export default function FeaturedSection({
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
                   <Sparkles className="h-3.5 w-3.5" />
-                  推荐工具
+                  {lang === 'zh' ? '推荐工具' : 'Featured Tool'}
                 </div>
                 <h4 className="mt-5 text-2xl font-black tracking-tight text-on-surface">
-                  {primary ? primary.name : '当前没有推荐工具'}
+                  {primary ? primary.name : lang === 'zh' ? '当前没有推荐工具' : 'No featured tool yet'}
                 </h4>
                 <p className="mt-3 max-w-xl text-sm leading-relaxed text-on-surface-variant">
                   {primary
                     ? primary.summary
-                    : '在注册表中标记 featured 后，就会出现在这里。'}
+                    : lang === 'zh'
+                      ? '在注册表中标记 featured 后，就会出现在这里。'
+                      : 'Mark a tool as featured in the registry to surface it here.'}
                 </p>
               </div>
               {primary ? (
@@ -56,7 +60,7 @@ export default function FeaturedSection({
                   onClick={() => onSelectTool(primary.id)}
                   type="button"
                 >
-                  打开工具
+                  {lang === 'zh' ? '打开工具' : 'Open Tool'}
                   <Wrench className="h-4 w-4" />
                 </button>
               ) : null}
@@ -68,22 +72,22 @@ export default function FeaturedSection({
           <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-high p-5">
             <div className="flex items-center gap-3 text-tertiary">
               <Star className="h-5 w-5" />
-              <span className="label-sm all-caps tracking-[0.2em]">收藏工具</span>
+              <span className="label-sm all-caps tracking-[0.2em]">{lang === 'zh' ? '收藏工具' : 'Favorites'}</span>
             </div>
             <div className="mt-4 text-3xl font-black text-on-surface">{favoriteCount}</div>
             <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
-              收藏会固定在快捷区里，减少来回翻找。
+              {lang === 'zh' ? '收藏会固定在快捷区里，减少来回翻找。' : 'Favorites stay pinned here so you can jump back faster.'}
             </p>
           </div>
 
           <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-high p-5">
             <div className="flex items-center gap-3 text-secondary">
               <Clock3 className="h-5 w-5" />
-              <span className="label-sm all-caps tracking-[0.2em]">最近使用</span>
+              <span className="label-sm all-caps tracking-[0.2em]">{lang === 'zh' ? '最近使用' : 'Recent Tool'}</span>
             </div>
-            <div className="mt-4 text-lg font-bold text-on-surface">{recentTool?.name ?? '还没有最近使用记录'}</div>
+            <div className="mt-4 text-lg font-bold text-on-surface">{recentTool?.name ?? (lang === 'zh' ? '还没有最近使用记录' : 'No recent tool yet')}</div>
             <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
-              {recentTool?.summary ?? '运行过一次的工具会出现在这里，方便快速回到上次工作。'}
+              {recentTool?.summary ?? (lang === 'zh' ? '运行过一次的工具会出现在这里，方便快速回到上次工作。' : 'Recently used tools appear here so you can jump back into your last task.')}
             </p>
             {recentTool ? (
               <button
@@ -91,7 +95,7 @@ export default function FeaturedSection({
                 onClick={() => onSelectTool(recentTool.id)}
                 type="button"
               >
-                继续使用
+                {lang === 'zh' ? '继续使用' : 'Resume'}
               </button>
             ) : null}
           </div>

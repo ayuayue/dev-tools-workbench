@@ -1092,6 +1092,13 @@ export default function App() {
                       onSelect={() => handleSelectTool(rawTool.id)}
                       onOpenInNewTab={() => handleOpenToolInNewTab(rawTool.id)}
                       onToggleFavorite={() => handleToggleFavorite(rawTool.id)}
+                      strings={{
+                        addFavorite: lang === 'zh' ? '加入收藏' : 'Add to favorites',
+                        removeFavorite: lang === 'zh' ? '取消收藏' : 'Remove from favorites',
+                        openInNewTab: lang === 'zh' ? '在新标签页打开' : 'Open in new tab',
+                        openTool: lang === 'zh' ? '打开工具' : 'Open tool',
+                        switchToTool: lang === 'zh' ? '切换到该工具' : 'Switch to tool',
+                      }}
                       title={tool.name}
                       variant="rail"
                     />

@@ -6,6 +6,13 @@ interface ToolCardProps {
   description: string;
   category: string;
   badges: string[];
+  strings?: {
+    addFavorite: string;
+    removeFavorite: string;
+    openInNewTab: string;
+    openTool: string;
+    switchToTool: string;
+  };
   categoryColor: 'primary' | 'secondary' | 'tertiary';
   compact?: boolean;
   variant?: 'card' | 'rail';
@@ -23,6 +30,7 @@ export default function ToolCard({
   description,
   category,
   badges,
+  strings,
   categoryColor,
   compact,
   variant = 'card',
@@ -39,6 +47,13 @@ export default function ToolCard({
     tertiary: 'border-tertiary/20 bg-tertiary/10 text-tertiary',
   };
   const isRail = variant === 'rail';
+  const labels = {
+    addFavorite: strings?.addFavorite ?? 'Add to favorites',
+    removeFavorite: strings?.removeFavorite ?? 'Remove from favorites',
+    openInNewTab: strings?.openInNewTab ?? 'Open in new tab',
+    openTool: strings?.openTool ?? 'Open tool',
+    switchToTool: strings?.switchToTool ?? 'Switch to tool',
+  };
 
   return (
     <div
@@ -94,7 +109,7 @@ export default function ToolCard({
             } ${isRail ? 'p-1' : compact ? 'p-1' : 'p-2'}`}
             onClick={onToggleFavorite}
             type="button"
-            title={isFavorite ? '取消收藏' : '加入收藏'}
+            title={isFavorite ? labels.removeFavorite : labels.addFavorite}
           >
             <Star className={`${isRail ? 'h-3.5 w-3.5' : compact ? 'h-3.5 w-3.5' : 'h-5 w-5'} ${isFavorite ? 'fill-current' : ''}`} />
           </button>
@@ -106,7 +121,7 @@ export default function ToolCard({
                 onOpenInNewTab();
               }}
               type="button"
-              title="在新标签页打开"
+              title={labels.openInNewTab}
             >
               <ExternalLink className={isRail ? 'h-3 w-3' : compact ? 'h-3 w-3' : 'h-4 w-4'} />
             </button>
@@ -115,7 +130,7 @@ export default function ToolCard({
             className={`rounded-xl bg-background/45 text-on-surface-variant shadow-[inset_0_0_0_1px_rgba(110,135,127,0.16)] transition-colors hover:bg-surface-container-highest hover:text-primary ${isRail ? 'p-1' : compact ? 'p-1.5' : 'p-2'}`}
             onClick={onSelect}
             type="button"
-            title={isOpen ? '切换到该工具' : '打开工具'}
+            title={isOpen ? labels.switchToTool : labels.openTool}
           >
             <ArrowRight className={isRail ? 'h-3 w-3' : compact ? 'h-3 w-3' : 'h-4 w-4'} />
           </button>
