@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   closeOtherTabs,
   closeAllTabs,
+  deriveActiveGroupFromTabs,
   ensureToolTabState,
   switchTabTool,
   TabState,
@@ -71,5 +72,13 @@ assert.equal(onlyActive[0].id, 'tab-2', 'close others should preserve the reques
 const closedAll = closeAllTabs();
 assert.equal(closedAll.tabs.length, 0, 'close all should remove every tab');
 assert.equal(closedAll.activeTabId, '', 'close all should clear the active tab id');
+
+const derivedGroup = deriveActiveGroupFromTabs(extraTabs, 'tab-3', 'text', (toolId) => {
+  if (toolId === 'replace-text') return 'text';
+  if (toolId === 'regex-tester') return 'regex';
+  if (toolId === 'jwt-decode') return 'jwt';
+  return null;
+});
+assert.equal(derivedGroup, 'text', 'active group should follow the active tab tool group');
 
 console.log('tab-state smoke test passed');

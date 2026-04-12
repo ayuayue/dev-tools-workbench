@@ -282,11 +282,11 @@ export default function Workbench({
   const preferPreviewLayout = Boolean(tool?.workspace?.preferPreviewLayout);
   const previewMinHeight = tool?.workspace?.previewMinHeight ?? (result.preview?.type === 'html' ? 360 : 288);
   const allowPreviewFullscreen = Boolean(tool?.workspace?.allowPreviewFullscreen && result.preview?.type === 'html' && result.preview.srcDoc);
-  const editorTitle = tool?.workspace?.editorTitle ?? (lang === 'zh' ? '编辑器' : 'Editor');
+  const editorTitle = tool?.workspace?.editorTitle ?? (lang === 'zh' ? '编辑器' : 'Input Editor');
   const editorLabel = tool?.workspace?.editorLabel ?? (lang === 'zh' ? '输入区' : 'Input');
   const editorPlaceholder = tool?.workspace?.editorPlaceholder ?? (lang === 'zh' ? '把原始文本粘贴到这里...' : 'Paste raw text here...');
   const resultSectionLabel =
-    result.preview?.type === 'html' && !showResultOutput ? (lang === 'zh' ? '预览区' : 'Preview') : lang === 'zh' ? '结果区' : 'Result';
+    result.preview?.type === 'html' && !showResultOutput ? (lang === 'zh' ? '预览区' : 'Preview') : lang === 'zh' ? '结果区' : 'Output';
 
   useEffect(() => {
     if (!isPreviewFullscreen) {
@@ -439,7 +439,7 @@ export default function Workbench({
                   type="button"
                 >
                   <Upload className="h-4 w-4" />
-                  {lang === 'zh' ? '写回编辑区' : 'Use in Editor'}
+                  {lang === 'zh' ? '写回编辑区' : 'Send to Editor'}
                 </button>
               ) : null}
               {result.download ? (
@@ -501,7 +501,7 @@ export default function Workbench({
         <div className="rounded-xl border border-outline/28 bg-surface-container p-4 shadow-[0_22px_40px_-32px_rgba(0,0,0,0.28)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="label-sm all-caps font-semibold tracking-[0.22em] text-primary/88">{lang === 'zh' ? '工具参数' : 'Tool Fields'}</p>
+              <p className="label-sm all-caps font-semibold tracking-[0.22em] text-primary/88">{lang === 'zh' ? '工具参数' : 'Parameters'}</p>
               <h3 className="mt-1.5 text-[18px] font-black tracking-[-0.02em] text-on-surface">{tool?.name ?? (lang === 'zh' ? '请选择一个工具' : 'Choose a tool')}</h3>
               <p className="mt-2 text-[13px] leading-6 text-on-surface-variant/88">
                 {tool?.summary ?? (lang === 'zh' ? '先在右侧选择工具，再在这里调整参数并运行。' : 'Choose a tool on the right, then adjust fields here before running.')}

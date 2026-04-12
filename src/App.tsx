@@ -6,7 +6,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ToolCard from './components/ToolCard';
 import Workbench from './components/Workbench';
-import {closeAllTabs, closeOtherTabs, ensureToolTabState, switchTabTool, TabState, ToolTabState} from './appTabState';
+import {closeAllTabs, closeOtherTabs, deriveActiveGroupFromTabs, ensureToolTabState, switchTabTool, TabState, ToolTabState} from './appTabState';
 import {
   executeTool,
   FEATURED_TOOL_IDS,
@@ -106,6 +106,7 @@ const GROUP_TRANSLATIONS: Record<ToolModuleGroupId, Record<AppLanguage, {label: 
 const UI_COPY = {
   zh: {
     ready: '先选择工具，再在工作台执行。',
+    emptyResultMessage: '先选择工具，再在工作台执行。',
     status: '默认中文和亮色已启用。先搜索，再选工具，然后在工作台运行。',
     searchPlaceholder: '按名称、标签或场景搜索工具...',
     currentGroup: '当前分组',
@@ -132,7 +133,7 @@ const UI_COPY = {
       slate: '青灰蓝',
       github: 'GitHub 亮色',
     },
-    newTab: '新建标签页',
+    newTab: '新建空标签',
     closeTab: '关闭标签',
     closeOtherTabs: '关闭其他',
     closeAllTabs: '关闭全部',
@@ -146,6 +147,7 @@ const UI_COPY = {
   },
   en: {
     ready: 'Choose a tool and run it from the workspace.',
+    emptyResultMessage: 'Choose a tool to generate output in the workspace.',
     status: 'English and light mode are ready. Search, pick a tool, then run it in the workspace.',
     searchPlaceholder: 'Search tools by name, tag, or use case...',
     currentGroup: 'Current Group',
@@ -178,8 +180,8 @@ const UI_COPY = {
       slate: 'Slate',
       github: 'GitHub Light',
     },
-    newTab: 'New Tab',
-    closeTab: 'Close tab',
+    newTab: 'Create Tab',
+    closeTab: 'Close Tab',
     closeOtherTabs: 'Close Others',
     closeAllTabs: 'Close All',
     untitled: 'Untitled',
@@ -188,6 +190,7 @@ const UI_COPY = {
   AppLanguage,
   {
     ready: string;
+    emptyResultMessage: string;
     status: string;
     searchPlaceholder: string;
     currentGroup: string;
@@ -221,11 +224,11 @@ const UI_COPY = {
 >;
 
 const DEFAULT_EDITOR_TEXT = `{
-  "标题": "开发工具台",
-  "负责人": "you@example.com",
-  "链接": [
+  "title": "Dev Toolbox",
+  "owner": "you@example.com",
+  "links": [
     "https://example.com/docs",
-    "https://openai.com/zh-Hans"
+    "https://openai.com"
   ]
 }`;
 
@@ -323,7 +326,7 @@ function readStoredTabs(): TabState[] {
                   ok: true,
                   output: '',
                   mode: 'result',
-                  message: UI_COPY[readStoredLanguage()].ready,
+                  message: UI_COPY[readStoredLanguage()].emptyResultMessage,
                 },
               resultVersion: legacyTab.resultVersion ?? 0,
               isRunning: legacyTab.isRunning ?? false,
@@ -365,7 +368,7 @@ function createDefaultResult(lang: AppLanguage): ToolResult {
     ok: true,
     output: '',
     mode: 'result',
-    message: UI_COPY[lang].ready,
+    message: UI_COPY[lang].emptyResultMessage,
   };
 }
 
@@ -387,6 +390,28 @@ function formatKindLabel(kind: ToolDefinition['kind'], lang: AppLanguage) {
     return kind === 'transform' ? 'transform' : kind === 'extract' ? 'extract' : 'generate';
   }
   return kind === 'transform' ? '转换' : kind === 'extract' ? '提取' : '生成';
+}
+
+function localizeTabTitle(tab: TabState, lang: AppLanguage) {
+  const tool = getToolById(tab.toolId);
+  if (!tool) {
+    return tab.toolName;
+  }
+  return getLocalizedTool(tool, lang).name;
+}
+
+function normalizeResultMessage(message: string, lang: AppLanguage) {
+  if (message === UI_COPY.zh.ready || message === UI_COPY.en.ready || message === UI_COPY.zh.emptyResultMessage || message === UI_COPY.en.emptyResultMessage) {
+    return UI_COPY[lang].emptyResultMessage;
+  }
+  return message;
+}
+
+function normalizeStatusMessage(message: string, lang: AppLanguage) {
+  if (message === UI_COPY.zh.status || message === UI_COPY.en.status) {
+    return UI_COPY[lang].status;
+  }
+  return message;
 }
 
 function getGroupBaseOrder(groupId: ToolModuleGroupId) {
@@ -505,6 +530,22 @@ export default function App() {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0] || null;
   const activeTool = activeTab ? getToolById(activeTab.toolId) : null;
   const activeToolState = activeTab && activeTool ? activeTab.toolStates[activeTool.id] : null;
+  const localizedResult = activeToolState
+    ? {
+        ...activeToolState.result,
+        message: normalizeResultMessage(activeToolState.result.message, lang),
+      }
+    : null;
+  const localizedStatus = {
+    ...status,
+    message: normalizeStatusMessage(status.message, lang),
+  };
+
+  useEffect(() => {
+    setActiveGroup((current) =>
+      deriveActiveGroupFromTabs(tabs, activeTabId, current, (toolId) => getToolById(toolId)?.group ?? null),
+    );
+  }, [activeTabId, tabs]);
 
   const visibleTools = isSearching
     ? filterTools({search: normalizedSearch})
@@ -580,6 +621,10 @@ export default function App() {
       } else if (newTabs.length === 0) {
         setActiveTabId('');
       }
+
+      setActiveGroup((current) =>
+        deriveActiveGroupFromTabs(newTabs, tabId === activeTabId ? newTabs[Math.min(index, Math.max(0, newTabs.length - 1))]?.id ?? '' : activeTabId, current, (toolId) => getToolById(toolId)?.group ?? null),
+      );
       
       return newTabs;
     });
@@ -598,6 +643,7 @@ export default function App() {
     const next = closeAllTabs();
     setTabs(next.tabs);
     setActiveTabId(next.activeTabId);
+    setActiveGroup(TOOL_GROUPS[0]?.id ?? 'text');
     updateStatus('info', lang === 'zh' ? '已关闭全部标签页。' : 'Closed all tabs.');
   }, [lang]);
 
@@ -929,7 +975,12 @@ export default function App() {
                       initial={{opacity: 0, x: -20}}
                       animate={{opacity: 1, x: 0}}
                       exit={{opacity: 0, x: 20}}
-                      onClick={() => setActiveTabId(tab.id)}
+                      onClick={() => {
+                        setActiveTabId(tab.id);
+                        if (tool) {
+                          setActiveGroup(tool.group);
+                        }
+                      }}
                       className={`group flex min-w-0 max-w-[200px] shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left transition-all ${
                         isActive
                           ? 'border-primary/36 bg-surface-container-high text-primary shadow-[inset_0_0_0_1px_rgba(163,166,255,0.14)]'
@@ -938,7 +989,7 @@ export default function App() {
                     >
                       {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
                       <span className="flex-1 truncate text-xs font-medium">
-                        {tab.toolName}
+                         {localizeTabTitle(tab, lang)}
                       </span>
                       <span
                         role="button"
@@ -1025,9 +1076,9 @@ export default function App() {
                   updateActiveTab({editorText: activeToolState.result.output});
                   updateStatus('success', lang === 'zh' ? '已将结果写回编辑区。' : 'The result has been written back into the editor.');
                 }}
-                result={activeToolState.result}
+                result={localizedResult ?? activeToolState.result}
                 resultVersion={activeToolState.resultVersion}
-                status={status}
+                status={localizedStatus}
                 tool={getLocalizedTool(activeTool, lang)}
                 lang={lang}
               />
