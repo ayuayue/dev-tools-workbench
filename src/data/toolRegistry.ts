@@ -17,7 +17,7 @@ import {
   Globe,
   KeyRound,
   Link,
-  LucideIcon,
+  type LucideIcon,
   Mail,
   MapPin,
   Play,
@@ -926,6 +926,17 @@ function base64ToBytes(text: string) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
+function detectFileTypeFromBytes(bytes: Uint8Array): {extension: string; mimeType: string} | null {
+  // 纯 Base64 通常没有 MIME 元数据，只能依赖文件头魔数判断类型；PDF 的标准头是 "%PDF-"。
+  // 这里先覆盖当前业务痛点，后续可按同一表驱动方式扩展更多二进制格式。
+  const hasPdfHeader = bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+  if (hasPdfHeader) {
+    return {extension: 'pdf', mimeType: 'application/pdf'};
+  }
+
+  return null;
+}
+
 function base64ToBase64Url(text: string) {
   return ensureText(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
@@ -1514,7 +1525,7 @@ function looksLikeCssSnippet(source: string) {
     return false;
   }
 
-  return /[#.\w\-\[\]=:"']+\s*\{[\s\S]*\}/.test(text) && !/<[a-z][\s\S]*>/i.test(text);
+  return /[#.\w\-[\]=:"']+\s*\{[\s\S]*\}/.test(text) && !/<[a-z][\s\S]*>/i.test(text);
 }
 
 function buildConsoleBridgeScript() {
@@ -2001,8 +2012,9 @@ export const TOOLS: ToolDefinition[] = [
       }
 
       const rawName = ensureText(fields.fileName).trim() || buildTimestampName();
-      const extension = (ensureText(fields.extension).trim() || 'txt').replace(/^\./, '');
+      const explicitExtension = ensureText(fields.extension).trim().replace(/^\./, '');
       const explicitMime = ensureText(fields.mimeType).trim();
+      let extension = explicitExtension || 'txt';
       let mimeType = explicitMime || 'application/octet-stream';
       let base64Content = source;
       let dataUrl = '';
@@ -2011,20 +2023,25 @@ export const TOOLS: ToolDefinition[] = [
         const [header, body] = source.split(',', 2);
         base64Content = body ?? '';
         const matchedMime = header.match(/^data:([^;]+);base64$/);
-        if (matchedMime?.[1]) {
+        if (matchedMime?.[1] && !explicitMime) {
           mimeType = matchedMime[1];
         }
-        dataUrl = source;
-      } else {
-        if (!explicitMime) {
-          if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension.toLowerCase())) {
-            mimeType = extension.toLowerCase() === 'svg' ? 'image/svg+xml' : `image/${extension.toLowerCase() === 'jpg' ? 'jpeg' : extension.toLowerCase()}`;
-          } else if (extension.toLowerCase() === 'txt') {
-            mimeType = 'text/plain;charset=utf-8';
-          }
-        }
-        dataUrl = `data:${mimeType};base64,${base64Content}`;
       }
+
+      const detectedType = detectFileTypeFromBytes(base64ToBytes(base64Content));
+      if (detectedType) {
+        // 用户显式填写的参数代表业务意图；自动识别只在参数缺省时补齐，避免覆盖自定义下载类型。
+        extension = explicitExtension || detectedType.extension;
+        mimeType = explicitMime || detectedType.mimeType;
+      } else if (!explicitMime) {
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension.toLowerCase())) {
+          mimeType = extension.toLowerCase() === 'svg' ? 'image/svg+xml' : `image/${extension.toLowerCase() === 'jpg' ? 'jpeg' : extension.toLowerCase()}`;
+        } else if (extension.toLowerCase() === 'txt') {
+          mimeType = 'text/plain;charset=utf-8';
+        }
+      }
+
+      dataUrl = `data:${mimeType};base64,${base64Content}`;
 
       const fileName = `${rawName}.${extension}`;
       const isImage = mimeType.startsWith('image/');
